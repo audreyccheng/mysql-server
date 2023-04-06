@@ -3581,6 +3581,7 @@ LEX::LEX()
       plugins(PSI_NOT_INSTRUMENTED),
       insert_update_values_map(nullptr),
       option_type(OPT_DEFAULT),
+      start_transaction_for(false),
       drop_temporary(false),
       sphead(nullptr),
       // Initialize here to avoid uninitialized variable warnings.

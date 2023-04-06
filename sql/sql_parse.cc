@@ -4240,6 +4240,10 @@ int mysql_execute_command(THD *thd, bool first_level) {
       break;
     }
     case SQLCOM_BEGIN:
+      if (lex->start_transaction_for) {
+        if (ha_start_trans_for(thd, lex->start_transaction_type,
+                           lex->start_transaction_args)) goto error;
+      }
       if (trans_begin(thd, lex->start_transaction_opt)) goto error;
       my_ok(thd);
       break;
