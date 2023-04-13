@@ -334,6 +334,7 @@ void lock_sys_create(
     num_clusters |= num_clusters >> 8;
     num_clusters++;
   }
+  ut_a(n_cells > num_clusters);
   lock_sys->cluster_hash = ut::new_<hash_table_t>(n_cells);
   hash_create_sync_obj(
     lock_sys->cluster_hash, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
@@ -349,6 +350,13 @@ void lock_sys_create(
 @return	hashed value */
 static uint64_t lock_rec_lock_hash_value(const lock_t *lock) {
   return lock_rec_hash_value(lock->rec_lock.page_id);
+}
+
+/** Calculates the hash value of a cluster lock: used in migrating the cluster hash table.
+@param[in]	lock	record lock object
+@return	hashed value */
+static uint64_t lock_clust_lock_hash_value(const lock_clust_t *lock) {
+  return lock->trx->cluster_id;
 }
 
 /** Resize the cluster hash table.
@@ -373,11 +381,11 @@ void cluster_hash_resize(ulint n_cells) {
     num_clusters |= num_clusters >> 8;
     num_clusters++;
   }
+  ut_a(n_cells > num_clusters);
   hash_create_sync_obj(
     lock_sys->cluster_hash, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
 
-  HASH_MIGRATE(old_hash, table); // TODO(accheng): need to update this with new lock class!!
-                // lock_t, hash, lock_rec_lock_hash_value);
+  HASH_MIGRATE(old_hash, table, lock_clust_t, hash, lock_clust_lock_hash_value);
 
   lock_sys->cluster_hash = table;
   hash_unlock_x_all(old_hash);

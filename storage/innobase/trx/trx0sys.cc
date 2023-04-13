@@ -597,9 +597,7 @@ void trx_sys_create(void) {
   trx_sys->cluster_sched_idx = 0;
 
   /* TODO(accheng): cluster length is currently hardcoded. */
-  trx_sys->cluster_sched = ut::new_arr_withkey<uint64_t>(
-    ut::make_psi_memory_key(mem_key_trx_sys_t_cluster_sched),
-    ut::Count{1000});
+  trx_sys->cluster_sched.resize(trx_sys->num_clusters);
   set_cluster_sched();
 
   new (&trx_sys->rsegs) Rsegs();
@@ -672,8 +670,6 @@ void trx_sys_close(void) {
   mutex_free(&trx_sys->mutex);
 
   trx_sys->rw_trx_ids.~trx_ids_t();
-
-  ut::delete_arr(trx_sys->n_diff_on_level);
 
   ut::free(trx_sys);
 
