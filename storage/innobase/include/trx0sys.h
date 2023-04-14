@@ -571,7 +571,7 @@ struct trx_sys_t {
 
   /* Cluster schedule index cooresponding to clusters vector.
      First value is a no-op cluster. */
-  std::vector<uint32_t, ut::allocator<uint32_t>> cluster_sched;
+  std::vector<uint32_t> cluster_sched;
 
   /** @} */
 
