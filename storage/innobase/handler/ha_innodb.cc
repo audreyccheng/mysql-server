@@ -1636,6 +1636,8 @@ static void innodb_pre_dd_shutdown(handlerton *) {
   }
 }
 
+static int start_trx(THD *thd, trx_t *trx, uint typ, const List<Item> &args);
+
 /** Start a parameterized transaction.
 @param[in]      hton            Handle to the handlerton structure
 @param[in]      thd             Thread/connection descriptor
@@ -5702,34 +5704,24 @@ void innobase_commit_low(trx_t *trx) /*!< in: transaction handle */
   trx->will_lock = 0;
 }
 
-int ha_innobase::start_trx(trx_t *trx, uint typ, const std::vector<int> &args) {
+static int start_trx(THD *thd, trx_t *trx, uint typ, const std::vector<int> &args) {
   int err;
   dberr_t error;
-
-  ut_a(m_prebuilt->trx == trx);
 
   // TODO(accheng): add stats eventually?
   // ha_statistic_increment(&System_status_var::ha_update_count);
 
-  error = innobase_srv_conc_enter_innodb(m_prebuilt);
-
-  if (error != DB_SUCCESS) {
-    goto func_exit;
-  }
-
-  error = schedule_trx(m_prebuilt);
+  error = schedule_trx(trx);
 
   if (error != DB_SUCCESS) {
     /* Something is wrong during transaction scheduling. */
     goto func_exit;
   }
 
-  innobase_srv_conc_exit_innodb(m_prebuilt);
-
 func_exit:
 
   err =
-      convert_error_code_to_mysql(error, m_prebuilt->table->flags, m_user_thd);
+      convert_error_code_to_mysql(error, 0, thd);
 
   return err;
 }
@@ -5790,8 +5782,7 @@ static int innobase_start_trx_for(
 
   innobase_register_trx(hton, current_thd, trx);
 
-  // return ha_innobase::start_trx(trx, typ, args);
-  return 0;
+  return start_trx(thd, trx, typ, args);
 }
 
 /** Creates an InnoDB transaction struct for the thd if it does not yet have

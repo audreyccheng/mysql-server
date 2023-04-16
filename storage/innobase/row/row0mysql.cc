@@ -646,14 +646,22 @@ static void row_mysql_convert_row_to_innobase(
   }
 }
 
-/** Does an update or delete of a row for MySQL.
-@param[in,out]  prebuilt        prebuilt struct in MySQL handle
+static void build_sched_graph(trx_t *trx) {
+  ut_ad(trx->sched_graph == nullptr);
+  ut_ad(trx->sched_heap == nullptr);
+  trx->sched_heap = mem_heap_create(512, UT_LOCATION_HERE);
+  trx->sched_graph = static_cast<que_fork_t *>(que_node_get_parent(
+      pars_complete_graph_for_exec(nullptr, trx, trx->sched_heap, nullptr)));
+  trx->sched_graph->state = QUE_FORK_ACTIVE;
+}
+
+/** Schedules a transaction.
+@param[in,out]  trx transaction to schedule
 @return error code or DB_SUCCESS */
-dberr_t schedule_trx(row_prebuilt_t *prebuilt) {
+dberr_t schedule_trx(trx_t *trx) {
   trx_savept_t savept;
   dberr_t err;
   que_thr_t *thr;
-  trx_t *trx = prebuilt->trx;
 
   trx->op_info = "cluster scheduling";
 
@@ -663,13 +671,10 @@ dberr_t schedule_trx(row_prebuilt_t *prebuilt) {
   savept = trx_savept_take(trx);
 
   /* Create a dummy sched_graph for getting a query thread to do the cluster locking. */
-  if (prebuilt->sched_graph == nullptr) {
-    row_prebuild_sched_graph(prebuilt);
+  if (trx->sched_graph == nullptr) {
+    build_sched_graph(trx);
   }
-  thr = que_fork_get_first_thr(prebuilt->sched_graph);
-
-  // TODO(accheng): do we need this?
-  ut_ad(!prebuilt->sql_stat_start);
+  thr = que_fork_get_first_thr(trx->sched_graph);
 
   que_thr_move_to_run_state_for_mysql(thr, trx);
 
@@ -1039,10 +1044,6 @@ void row_prebuilt_free(row_prebuilt_t *prebuilt, bool dict_locked) {
     que_graph_free_recursive(prebuilt->upd_graph);
   }
 
-  if (prebuilt->sched_graph) {
-    que_graph_free_recursive(prebuilt->sched_graph);
-  }
-
   if (prebuilt->blob_heap) {
     row_mysql_prebuilt_free_blob_heap(prebuilt);
   }
@@ -1103,10 +1104,6 @@ void row_update_prebuilt_trx(row_prebuilt_t *prebuilt, trx_t *trx) {
 
   if (prebuilt->sel_graph) {
     prebuilt->sel_graph->trx = trx;
-  }
-
-  if (prebuilt->sched_graph) {
-    prebuilt->sched_graph->trx = trx;
   }
 }
 
@@ -1819,20 +1816,6 @@ void row_prebuild_sel_graph(row_prebuilt_t *prebuilt) {
     prebuilt->sel_graph->state = QUE_FORK_ACTIVE;
   }
 }
-
-void row_prebuild_sched_graph(row_prebuilt_t *prebuilt) {
-  ut_ad(prebuilt && prebuilt->trx);
-
-  if (prebuilt->sched_graph == nullptr) {
-
-    prebuilt->sched_graph = static_cast<que_fork_t *>(que_node_get_parent(
-        pars_complete_graph_for_exec(nullptr,
-                                     prebuilt->trx, prebuilt->heap, prebuilt)));
-
-    prebuilt->sched_graph->state = QUE_FORK_ACTIVE;
-  }
-}
-
 
 /** Creates an query graph node of 'update' type to be used in the MySQL
  interface.
