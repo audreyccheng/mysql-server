@@ -956,6 +956,16 @@ Allocate cached locks for the transaction.
 @param trx              allocate cached record locks for this transaction */
 void lock_trx_alloc_locks(trx_t *trx);
 
+/**
+Allocate cluster lock for the transaction.
+@param trx              allocate cluster lock for this transaction */
+void lock_clust_trx_alloc(trx_t *trx);
+
+/**
+Free cluster lock for the transaction.
+@param trx              free cluster lock for this transaction */
+void lock_clust_free(trx_t *trx);
+
 /** Lock modes and types */
 /** @{ */
 /** mask used to extract mode from the  type_mode field in a lock */

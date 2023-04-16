@@ -6631,6 +6631,25 @@ void lock_trx_alloc_locks(trx_t *trx) {
   trx_mutex_exit(trx);
 }
 
+/**
+Allocate cluster lock for the transaction.
+@param trx              allocate cluster lock for this transaction */
+void lock_clust_trx_alloc(trx_t *trx) {
+  trx_mutex_enter(trx);
+
+  trx->lock_clust = ut::new_withkey<lock_clust_t>(UT_NEW_THIS_FILE_PSI_KEY);
+  ut_a(trx->lock_clust->hash == nullptr);
+
+  trx_mutex_exit(trx);
+}
+
+/**
+Free cluster lock for the transaction.
+@param trx              free cluster lock for this transaction */
+void lock_clust_free(trx_t *trx) {
+  ut::delete_(trx->lock_clust);
+}
+
 void lock_notify_about_deadlock(const ut::vector<const trx_t *> &trxs_on_cycle,
                                 const trx_t *victim_trx) {
   Deadlock_notifier::notify(trxs_on_cycle, victim_trx);
