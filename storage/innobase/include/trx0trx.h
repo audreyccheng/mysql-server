@@ -827,7 +827,7 @@ struct trx_t {
   trx_lock_t lock;
 
   /** Cluster lock for scheduling. Protected by trx->mutex. */
-  lock_clust_t lock_clust;
+  lock_clust_t *lock_clust;
 
   /**
   false:  a normal transaction

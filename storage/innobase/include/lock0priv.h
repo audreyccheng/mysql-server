@@ -302,6 +302,9 @@ struct lock_clust_t {
   /** transaction owning the lock */
   trx_t *trx;
 
+  /** The link node in a singly linked list, used by the hash table. */
+  lock_clust_t *hash;
+
   /** Lock wait started at this time. Requires trx->mutex. */
   std::chrono::system_clock::time_point wait_started;
 };
