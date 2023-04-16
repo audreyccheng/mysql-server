@@ -271,6 +271,8 @@ struct TrxFactory {
     mutex_create(LATCH_ID_TRX_UNDO, &trx->undo_mutex);
 
     lock_trx_alloc_locks(trx);
+
+    trx->lock_clust = ut::new_withkey<lock_clust_t>(UT_NEW_THIS_FILE_PSI_KEY);
   }
 
   /** Release resources held by the transaction object.
@@ -322,6 +324,8 @@ struct TrxFactory {
     trx->lock.rec_pool.~lock_pool_t();
 
     trx->lock.table_pool.~lock_pool_t();
+
+    ut::delete_(trx->lock_clust);
   }
 
   /** Enforce any invariants here, this is called before the transaction
@@ -346,6 +350,8 @@ struct TrxFactory {
     ut_a(trx->lock.wait_thr == nullptr);
     ut_a(trx->lock.wait_lock == nullptr);
     ut_a(trx->lock.blocking_trx.load() == nullptr);
+
+    ut_a(trx->lock_clust.hash == nullptr);
 
     ut_a(!trx->has_search_latch);
 
