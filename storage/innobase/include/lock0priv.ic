@@ -250,6 +250,7 @@ static inline lock_clust_t *lock_clust_pop(uint16_t cluster_id) {
   return found;
 }
 
+/* Add cluster lock to end of queue. */
 static inline void lock_clust_push(lock_clust_t *lock) {
   rw_lock_t *hash_lock = hash_get_lock(lock_sys->cluster_hash, lock->trx->cluster_id);
   rw_lock_x_lock(hash_lock, UT_LOCATION_HERE);
