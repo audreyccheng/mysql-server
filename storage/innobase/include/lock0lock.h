@@ -257,6 +257,14 @@ void lock_sys_create(
 @param[in]      n_cells number of slots in lock hash table */
 void lock_sys_resize(ulint n_cells);
 
+/** Resize the cluster hash table.
+ @return bool for whether hash table was resized */
+bool cluster_hash_resize();
+
+/** Determine if cluster hash table needs resizing.
+ @return bool for whether hash table was resized */
+bool lock_clust_resize();
+
 /** Closes the lock system at database shutdown. */
 void lock_sys_close(void);
 /** Gets the heap_no of the smallest user record on a page.
@@ -1067,6 +1075,9 @@ struct lock_sys_t {
   /** Set to the event that is created in the lock wait monitor thread. A value
   of 0 means the thread is not active */
   os_event_t timeout_event;
+
+  /** Max size for cluster hash before resizing is needed. */
+  size_t max_cluster_hash_size;
 
 #ifdef UNIV_DEBUG
   /** Lock timestamp counter, used to assign lock->m_seq on creation. */
