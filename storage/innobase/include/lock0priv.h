@@ -915,6 +915,10 @@ sleep.
 @param[in, out]   lock    The lock for which lock->trx is waiting */
 void lock_reset_wait_and_release_thread_if_suspended(lock_t *lock);
 
+/** This function wakes up a transaction waiting for a cluster lock.
+@param[in, out]   lock    The cluster lock for which lock->trx is waiting */
+void lock_clust_reset_wait_and_release_thread_if_suspended(lock_clust_t *lock);
+
 /** Checks if some transaction has an implicit x-lock on a record in a clustered
 index.
 @param[in] rec User record.

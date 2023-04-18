@@ -309,6 +309,8 @@ const char *ut_strerr(dberr_t num) {
       return ("Out of disk space");
     case DB_LOCK_WAIT:
       return ("Lock wait");
+    case DB_LOCK_CLUST_WAIT:
+      return ("Cluster lock wait");
     case DB_DEADLOCK:
       return ("Deadlock");
     case DB_ROLLBACK:

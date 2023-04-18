@@ -664,6 +664,11 @@ prepare to release locks early.
 @param[in]      only_gap        release only GAP locks */
 void lock_trx_release_read_locks(trx_t *trx, bool only_gap);
 
+/** Grants a cluster lock to a waiting cluster lock request and releases the
+waiting transaction.
+@param[in,out]    lock    waiting cluster lock request */
+void lock_clust_grant(lock_clust_t *lock);
+
 /** Iterate over the granted locks which conflict with trx->lock.wait_lock and
 prepare the hit list for ASYNC Rollback.
 
@@ -901,6 +906,13 @@ void lock_wait_request_check_for_cycles();
  resolution chose this transaction as a victim. */
 void lock_wait_suspend_thread(que_thr_t *thr); /*!< in: query thread associated
                                                with the user OS thread */
+
+/** Puts a user OS thread to wait for a cluster ock to be released. If an error
+ occurs during the wait trx->error_state associated with thr is != DB_SUCCESS
+ when we return. DB_INTERRUPTED is the possible error. */
+void lock_clust_wait_suspend_thread(que_thr_t *thr); /*!< in: query thread
+                                               associated with the user OS thread */
+
 /** Unlocks AUTO_INC type locks that were possibly reserved by a trx. This
  function should be called at the the end of an SQL statement, by the
  connection thread that owns the transaction (trx->mysql_thd). */
@@ -1064,6 +1076,14 @@ struct lock_sys_t {
   /** The highest slot ever used in the waiting_threads array.
   Protected by lock_sys->wait_mutex. */
   srv_slot_t *last_slot;
+
+  /** Array of user threads suspended while waiting for cluster locks within InnoDB.
+  Protected by the lock_sys->wait_mutex. */
+  srv_slot_t *clust_waiting_threads;
+
+  /** The highest slot ever used in the clust_waiting_threads array.
+  Protected by lock_sys->wait_mutex. */
+  srv_slot_t *clust_last_slot;
 
   /** true if rollback of all recovered transactions is complete.
   Protected by exclusive global lock_sys latch. */

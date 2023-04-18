@@ -313,6 +313,10 @@ void lock_sys_create(
 
   lock_sys->last_slot = lock_sys->waiting_threads;
 
+  lock_sys->clust_waiting_threads = static_cast<srv_slot_t *>(ptr);
+
+  lock_sys->clust_last_slot = lock_sys->clust_waiting_threads;
+
   mutex_create(LATCH_ID_LOCK_SYS_WAIT, &lock_sys->wait_mutex);
 
   lock_sys->timeout_event = os_event_create();
@@ -535,6 +539,15 @@ void lock_sys_close(void) {
       os_event_destroy(slot->event);
     }
   }
+
+  srv_slot_t *clust_slot = lock_sys->clust_waiting_threads;
+
+  for (uint32_t i = 0; i < srv_max_n_threads; i++, ++clust_slot) {
+    if (clust_slot->event != nullptr) {
+      os_event_destroy(clust_slot->event);
+    }
+  }
+
   for (auto &cached_lock_mode_name : lock_cached_lock_mode_names) {
     ut::free(const_cast<char *>(cached_lock_mode_name.second));
   }
@@ -2174,6 +2187,20 @@ static void lock_grant(lock_t *lock) {
                          trx_get_id_for_print(lock->trx)));
 
   lock_reset_wait_and_release_thread_if_suspended(lock);
+  ut_ad(trx_mutex_own(lock->trx));
+
+  trx_mutex_exit(lock->trx);
+}
+
+/** Grants a cluster lock to a waiting cluster lock request and releases the
+waiting transaction.
+@param[in,out]    lock    waiting cluster lock request */
+void lock_clust_grant(lock_clust_t *lock) {
+  ut_ad(!trx_mutex_own(lock->trx));
+
+  trx_mutex_enter(lock->trx);
+
+  lock_clust_reset_wait_and_release_thread_if_suspended(lock);
   ut_ad(trx_mutex_own(lock->trx));
 
   trx_mutex_exit(lock->trx);

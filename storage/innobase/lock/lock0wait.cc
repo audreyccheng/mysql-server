@@ -120,6 +120,57 @@ static void lock_wait_table_release_slot(
   lock_wait_mutex_exit();
 }
 
+/** Release a slot in the lock_sys_t::clust_waiting_threads. Adjust the array last
+ pointer if there are empty slots towards the end of the table. */
+static void lock_clust_wait_table_release_slot(
+    srv_slot_t *slot) /*!< in: slot to release */
+{
+#ifdef UNIV_DEBUG
+  srv_slot_t *upper = lock_sys->clust_waiting_threads + srv_max_n_threads;
+#endif /* UNIV_DEBUG */
+
+  lock_wait_mutex_enter();
+  /* We omit trx_mutex_enter and a lock_sys latches here, because we are only
+  going to touch thr->slot, which is a member used only by lock0wait.cc and is
+  sufficiently protected by lock_wait_mutex. Yes, there are readers who read
+  the thr->slot holding only trx->mutex and a lock_sys latch, but they do so,
+  when they are sure that we were not woken up yet, so our thread can't be here.
+  See comments in lock_wait_release_thread_if_suspended() for more details. */
+
+  ut_ad(slot->in_use);
+  ut_ad(slot->thr != nullptr);
+  ut_ad(slot->thr->slot != nullptr);
+  ut_ad(slot->thr->slot == slot);
+
+  /* Must be within the array boundaries. */
+  ut_ad(slot >= lock_sys->clust_waiting_threads);
+  ut_ad(slot < upper);
+
+  slot->thr->slot = nullptr;
+  slot->thr = nullptr;
+  slot->in_use = false;
+
+  /* Scan backwards and adjust the last free slot pointer. */
+  for (slot = lock_sys->clust_last_slot;
+       slot > lock_sys->clust_waiting_threads && !slot->in_use; --slot) {
+    /* No op */
+  }
+
+  /* Either the array is empty or the last scanned slot is in use. */
+  ut_ad(slot->in_use || slot == lock_sys->clust_waiting_threads);
+
+  lock_sys->clust_last_slot = slot + 1;
+
+  /* The last slot is either outside of the array boundary or it's
+  on an empty slot. */
+  ut_ad(lock_sys->clust_last_slot == upper || !lock_sys->clust_last_slot->in_use);
+
+  ut_ad(lock_sys->clust_last_slot >= lock_sys->clust_waiting_threads);
+  ut_ad(lock_sys->clust_last_slot <= upper);
+
+  lock_wait_mutex_exit();
+}
+
 /** Counts number of calls to lock_wait_table_reserve_slot.
 It is protected by lock_wait_mutex.
 Current value of this counter is stored in the slot a transaction has chosen
@@ -188,6 +239,60 @@ static srv_slot_t *lock_wait_table_reserve_slot(
          " limit. Cannot continue operation. Before aborting, we print"
          " a list of waiting threads.";
   lock_wait_table_print();
+
+  ut_error;
+}
+
+/** Reserves a slot in the thread table for the current user OS thread.
+ @return reserved slot */
+static srv_slot_t *lock_clust_wait_table_reserve_slot(
+    que_thr_t *thr, /*!< in: query thread associated
+                    with the user OS thread */
+    std::chrono::steady_clock::duration
+        wait_timeout) /*!< in: lock wait timeout value */
+{
+  srv_slot_t *slot;
+
+  ut_ad(lock_wait_mutex_own());
+  ut_ad(trx_mutex_own(thr_get_trx(thr)));
+
+  slot = lock_sys->clust_waiting_threads;
+
+  for (uint32_t i = srv_max_n_threads; i--; ++slot) {
+    if (!slot->in_use) {
+      slot->reservation_no = lock_wait_table_reservations++;
+      slot->in_use = true;
+      slot->thr = thr;
+      slot->thr->slot = slot;
+
+      if (slot->event == nullptr) {
+        slot->event = os_event_create();
+        ut_a(slot->event);
+      }
+
+      os_event_reset(slot->event);
+      slot->suspended = true;
+      slot->suspend_time = std::chrono::steady_clock::now();
+      slot->wait_timeout = wait_timeout;
+
+      if (slot == lock_sys->clust_last_slot) {
+        ++lock_sys->clust_last_slot;
+      }
+
+      ut_ad(lock_sys->clust_last_slot <=
+            lock_sys->clust_waiting_threads + srv_max_n_threads);
+
+      /* TODO(accheng): add this if we add timeout for cluster locks */
+      // lock_wait_request_check_for_cycles();
+      return (slot);
+    }
+  }
+
+  ib::error(ER_IB_MSG_646)
+      << "There appear to be " << srv_max_n_threads
+      << " user"
+         " threads currently waiting inside InnoDB, which is the upper"
+         " limit. Cannot continue operation.";
 
   ut_error;
 }
@@ -352,6 +457,139 @@ void lock_wait_suspend_thread(que_thr_t *thr) {
   }
 }
 
+void lock_clust_wait_suspend_thread(que_thr_t *thr) {
+  srv_slot_t *slot;
+  trx_t *trx;
+  std::chrono::steady_clock::time_point start_time;
+
+  trx = thr_get_trx(thr);
+
+  if (trx->mysql_thd != nullptr) {
+    DEBUG_SYNC_C("lock_clust_wait_suspend_thread_enter");
+  }
+
+  /* InnoDB system transactions (such as the purge, and
+  incomplete transactions that are being rolled back after crash
+  recovery) will use the global value of
+  innodb_lock_wait_timeout, because trx->mysql_thd == NULL. */
+  const auto lock_wait_timeout = trx_lock_wait_timeout_get(trx);
+
+  lock_wait_mutex_enter();
+
+  trx_mutex_enter(trx);
+
+  trx->error_state = DB_SUCCESS;
+
+  if (thr->state == QUE_THR_RUNNING) {
+    ut_ad(thr->is_active);
+
+    /* The lock has already been released: no need to suspend */
+    lock_wait_mutex_exit();
+    trx_mutex_exit(trx);
+    return;
+  }
+
+  ut_ad(!thr->is_active);
+
+  slot = lock_clust_wait_table_reserve_slot(thr, lock_wait_timeout);
+
+  // TODO(accheng): add stats for cluster lock
+  // if (thr->lock_state == QUE_THR_LOCK_ROW) {
+  //   srv_stats.n_lock_wait_count.inc();
+  //   srv_stats.n_lock_wait_current_count.inc();
+
+  //   start_time = std::chrono::steady_clock::now();
+  // }
+
+  lock_wait_mutex_exit();
+
+  trx_mutex_exit(trx);
+
+  /* Suspend this thread and wait for the event. */
+
+  auto was_declared_inside_innodb = trx->declared_to_be_inside_innodb;
+
+  if (was_declared_inside_innodb) {
+    /* We must declare this OS thread to exit InnoDB, since a
+    possible other thread holding a lock which this thread waits
+    for must be allowed to enter, sooner or later */
+
+    srv_conc_force_exit_innodb(trx);
+  }
+
+  /* TODO(accheng): should we make a new lock type? */
+  thd_wait_begin(trx->mysql_thd, THD_WAIT_ROW_LOCK);
+
+  DEBUG_SYNC_C("lock_clust_wait_will_wait");
+
+  os_event_wait(slot->event);
+
+  DEBUG_SYNC_C("lock_clust_wait_has_finished_waiting");
+
+  thd_wait_end(trx->mysql_thd);
+
+  /* After resuming, reacquire the data dictionary latch if
+  necessary. */
+
+  if (was_declared_inside_innodb) {
+    /* Return back inside InnoDB */
+
+    srv_conc_force_enter_innodb(trx);
+  }
+
+  /* Release the slot for others to use */
+
+  lock_clust_wait_table_release_slot(slot);
+
+  if (thr->lock_state == QUE_THR_LOCK_ROW) {
+    const auto diff_time = std::chrono::steady_clock::now() - start_time;
+
+    srv_stats.n_lock_wait_current_count.dec();
+    srv_stats.n_lock_wait_time.add(
+        std::chrono::duration_cast<std::chrono::microseconds>(diff_time)
+            .count());
+
+    if (diff_time > lock_sys->n_lock_max_wait_time) {
+      lock_sys->n_lock_max_wait_time = diff_time;
+    }
+
+    /* Record the lock wait time for this thread */
+    thd_set_lock_wait_time(trx->mysql_thd, diff_time);
+
+    DBUG_EXECUTE_IF("lock_instrument_slow_query_log",
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1)););
+  }
+
+  // TODO(accheng): add stats and thd wait time for cluster lock
+  // if (thr->lock_state == QUE_THR_LOCK_ROW) {
+  //   const auto diff_time = std::chrono::steady_clock::now() - start_time;
+
+  //   srv_stats.n_lock_wait_current_count.dec();
+  //   srv_stats.n_lock_wait_time.add(
+  //       std::chrono::duration_cast<std::chrono::microseconds>(diff_time)
+  //           .count());
+
+  //   if (diff_time > lock_sys->n_lock_max_wait_time) {
+  //     lock_sys->n_lock_max_wait_time = diff_time;
+  //   }
+
+  //   /* Record the lock wait time for this thread */
+  //   thd_set_lock_wait_time(trx->mysql_thd, diff_time);
+
+  //   DBUG_EXECUTE_IF("lock_instrument_slow_query_log",
+  //                   std::this_thread::sleep_for(std::chrono::milliseconds(1)););
+  // }
+
+  /* TODO(accheng): add this if we add timeout for cluster locks */
+  // if (trx->error_state == DB_LOCK_WAIT_TIMEOUT) {
+  //   MONITOR_INC(MONITOR_TIMEOUT);
+  // }
+
+  if (trx_is_interrupted(trx)) {
+    trx->error_state = DB_INTERRUPTED;
+  }
+}
+
 /** Releases a user OS thread waiting for a lock to be released, if the
  thread is already suspended. Please do not call it directly, but rather use the
  lock_reset_wait_and_release_thread_if_suspended() wrapper.
@@ -417,6 +655,19 @@ static void lock_wait_release_thread_if_suspended(que_thr_t *thr) {
   }
 }
 
+/** Releases a user OS thread waiting for a cluster lock to be released, if the
+ thread is already suspended.
+ @param[in]   thr   query thread associated with the user OS thread */
+static void lock_clust_wait_release_thread_if_suspended(que_thr_t *thr) {
+  ut_ad(trx_mutex_own(thr_get_trx(thr)));
+
+  ut_ad(thr->state == QUE_THR_RUNNING);
+
+  if (thr->slot != nullptr && thr->slot->in_use && thr->slot->thr == thr) {
+    os_event_set(thr->slot->event);
+  }
+}
+
 void lock_reset_wait_and_release_thread_if_suspended(lock_t *lock) {
   ut_ad(locksys::owns_lock_shard(lock));
   ut_ad(trx_mutex_own(lock->trx));
@@ -460,6 +711,19 @@ void lock_reset_wait_and_release_thread_if_suspended(lock_t *lock) {
     lock_wait_release_thread_if_suspended(thr);
   }
 }
+
+void lock_clust_reset_wait_and_release_thread_if_suspended(lock_clust_t *lock) {
+  ut_ad(trx_mutex_own(lock->trx));
+
+  /* The following function releases the trx from cluster lock wait */
+
+  que_thr_t *thr = que_thr_end_lock_clust_wait(lock->trx);
+
+  if (thr != nullptr) {
+    lock_clust_wait_release_thread_if_suspended(thr);
+  }
+}
+
 static void lock_wait_try_cancel(trx_t *trx, bool timeout) {
   ut_a(trx->lock.wait_lock != nullptr);
   ut_ad(locksys::owns_lock_shard(trx->lock.wait_lock));

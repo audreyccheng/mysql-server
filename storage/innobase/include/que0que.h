@@ -117,6 +117,11 @@ void que_run_threads(que_thr_t *thr); /*!< in: query thread */
  @return query thread instance of thread to wakeup or NULL */
 que_thr_t *que_thr_end_lock_wait(trx_t *trx); /*!< in: transaction in the
                                               QUE_THR_LOCK_WAIT state */
+/** Moves a suspended query thread to running state and may release
+ a worker thread to execute it. This function should be used to end
+ the wait state of a query thread waiting for a cluster lock.
+ @return the query thread that needs to be released. */
+que_thr_t *que_thr_end_lock_clust_wait(trx_t *trx);
 /** Starts execution of a command in a query fork. Picks a query thread which
  is not in the QUE_THR_RUNNING state and moves it to that state. If none
  can be chosen, a situation which may arise in parallelized fetches, NULL
@@ -222,6 +227,7 @@ enum que_thr_state_t {
   QUE_THR_COMPLETED,
   QUE_THR_COMMAND_WAIT,
   QUE_THR_LOCK_WAIT,
+  QUE_THR_LOCK_CLUST_WAIT,
   QUE_THR_SUSPENDED
 };
 

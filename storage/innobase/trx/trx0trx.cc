@@ -164,6 +164,8 @@ static void trx_init(trx_t *trx) {
 
   trx->cluster_id = 0;
 
+  trx->clust_wait_thr = nullptr;
+
   trx->isolation_level = TRX_ISO_REPEATABLE_READ;
 
   trx->check_foreigns = true;
@@ -326,6 +328,8 @@ struct TrxFactory {
     trx->lock.rec_pool.~lock_pool_t();
 
     trx->lock.table_pool.~lock_pool_t();
+
+    ut_a(trx->clust_wait_thr == nullptr);
 
     lock_clust_free(trx);
   }
