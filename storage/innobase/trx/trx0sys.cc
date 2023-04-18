@@ -564,6 +564,38 @@ void set_cluster_sched() {
   }
 }
 
+std::vector<std::vector<int>> trx_cluster_hotkey_arr;
+std::map<uint, int> trx_type_len_map;
+
+/** Computes trx's cluster number given a trx and its args
+ * @param typ Trx type
+ * @param trx_args Trx args
+ * @return Index of cluster trx belongs to
+ */
+uint trx_get_cluster_no(uint typ, std::vector<dfield_t> trx_args) {
+  const auto num_clusters = trx_cluster_hotkey_arr.size();
+  const auto num_hotkeys = trx_cluster_hotkey_arr[0].size();
+
+  int trx_arr[num_hotkeys] = { 0 };
+  const auto trx_len = trx_type_len_map[typ];
+  for (auto i = 0; i < trx_args.size(); ++i)
+    trx_arr[trx_args[i]] = (trx_len - i); // TODO: modify based on dfield_t
+
+  size_t best_cluster_i = 0;
+  uint best_loss = UINT32_MAX;
+  for (size_t cluster_i = 0; cluster_i < num_clusters; ++cluster_i) {
+    uint curr_loss = 0;
+    for (size_t hotkey_i = 0; hotkey_i < num_hotkeys; ++hotkey_i) /* L1 loss */
+      curr_loss += abs(trx_idx_map_global[cluster_i][hotkey_i] - trx_arr[hotkey_i]);
+    if (curr_loss < best_loss) {
+      best_cluster_i = cluster_i;
+      best_loss = curr_loss;
+    }
+  }
+
+  return (uint) best_cluster_i;
+}
+
 /** Creates the trx_sys instance and initializes purge_queue and mutex. */
 void trx_sys_create(void) {
   ut_ad(trx_sys == nullptr);

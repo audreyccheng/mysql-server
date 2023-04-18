@@ -76,6 +76,9 @@ void trx_sys_create(void);
 /** Creates and initializes the transaction system at the database creation. */
 void trx_sys_create_sys_pages(void);
 
+/** Computes trx's cluster number given a trx and its args */
+uint trx_get_cluster_no(uint type, std::vector<dfield_t> trx_args);
+
 /** Find the page number in the TRX_SYS page for a given slot/rseg_id
 @param[in]      rseg_id         slot number in the TRX_SYS page rseg array
 @return page number from the TRX_SYS page rseg array */
@@ -569,7 +572,7 @@ struct trx_sys_t {
   /* Index for cluster schedule (protected by trx_sys_mutex). */
   uint32_t cluster_sched_idx;
 
-  /* Cluster schedule index cooresponding to clusters vector.
+  /* Cluster schedule index corresponding to clusters vector.
      First value is a no-op cluster. */
   std::vector<uint32_t> cluster_sched;
 
