@@ -313,6 +313,10 @@ void lock_sys_create(
 
   lock_sys->last_slot = lock_sys->waiting_threads;
 
+  lock_sys->clust_waiting_threads = static_cast<srv_slot_t *>(ptr);
+
+  lock_sys->clust_last_slot = lock_sys->clust_waiting_threads;
+
   mutex_create(LATCH_ID_LOCK_SYS_WAIT, &lock_sys->wait_mutex);
 
   lock_sys->timeout_event = os_event_create();
@@ -334,10 +338,15 @@ void lock_sys_create(
     num_clusters |= num_clusters >> 8;
     num_clusters++;
   }
-  ut_a(n_cells > num_clusters);
-  lock_sys->cluster_hash = ut::new_<hash_table_t>(n_cells);
+
+  /* TODO(accheng): starting size of cluster hash is currently hardcoded. */
+  size_t starting_size = 10000;
+  ut_a(starting_size > num_clusters);
+  lock_sys->cluster_hash = ut::new_<hash_table_t>(starting_size);
   hash_create_sync_obj(
     lock_sys->cluster_hash, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
+
+  lock_sys->max_cluster_hash_size = starting_size;
 
   if (!srv_read_only_mode) {
     lock_latest_err_file = os_file_create_tmpfile();
@@ -360,13 +369,23 @@ static uint64_t lock_clust_lock_hash_value(const lock_clust_t *lock) {
 }
 
 /** Resize the cluster hash table.
-@param[in]	n_cells	number of slots in new hash table */
-void cluster_hash_resize(ulint n_cells) {
+ @return bool for whether hash table was resized */
+bool cluster_hash_resize() {
   hash_table_t *old_hash;
 
   old_hash = lock_sys->cluster_hash;
   hash_lock_x_all(old_hash);
-  hash_table_t *table = ut::new_<hash_table_t>(n_cells);
+  size_t n = hash_get_n_cells(lock_sys->cluster_hash);
+
+  /* TODO(accheng): cluster hash size threshold is currently hardcoded. */
+  if (lock_sys->max_cluster_hash_size > n + 100) {
+    /* Resizing must have already occurred so we can exit. */
+    hash_unlock_x_all(old_hash);
+    return false;
+  }
+
+  lock_sys->max_cluster_hash_size *= 2;
+  hash_table_t *table = ut::new_<hash_table_t>(lock_sys->max_cluster_hash_size);
 
   mutex_enter(&trx_sys->mutex);
   uint16_t num_clusters = trx_sys->num_clusters;
@@ -381,7 +400,7 @@ void cluster_hash_resize(ulint n_cells) {
     num_clusters |= num_clusters >> 8;
     num_clusters++;
   }
-  ut_a(n_cells > num_clusters);
+  ut_a(lock_sys->max_cluster_hash_size > num_clusters);
   hash_create_sync_obj(
     lock_sys->cluster_hash, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
 
@@ -407,13 +426,28 @@ void cluster_hash_resize(ulint n_cells) {
   old_hash->type = HASH_TABLE_SYNC_NONE;
 
   /* Clear the hash table. */
-  size_t n = hash_get_n_cells(old_hash);
+  n = hash_get_n_cells(old_hash);
 
   for (size_t i = 0; i < n; i++) {
     hash_get_nth_cell(old_hash, i)->node = nullptr;
   }
   ut::delete_(old_hash);
 
+  return true;
+}
+
+/** Determine if cluster hash table needs resizing.
+ @return bool for whether hash table was resized */
+bool lock_clust_resize() {
+  /* Approximate value since we're not holding any rw locks. */
+  size_t n = hash_get_n_cells(lock_sys->cluster_hash);
+
+  /* TODO(accheng): cluster hash size threshold is currently hardcoded. */
+  if (lock_sys->max_cluster_hash_size < n + 100) {
+    return cluster_hash_resize();
+  }
+
+  return false;
 }
 
 /** Resize the lock hash tables.
@@ -492,6 +526,8 @@ void lock_sys_close(void) {
   }
   ut::delete_(lock_sys->cluster_hash);
 
+  lock_sys->max_cluster_hash_size = 0;
+
   os_event_destroy(lock_sys->timeout_event);
 
   mutex_destroy(&lock_sys->wait_mutex);
@@ -503,6 +539,15 @@ void lock_sys_close(void) {
       os_event_destroy(slot->event);
     }
   }
+
+  srv_slot_t *clust_slot = lock_sys->clust_waiting_threads;
+
+  for (uint32_t i = 0; i < srv_max_n_threads; i++, ++clust_slot) {
+    if (clust_slot->event != nullptr) {
+      os_event_destroy(clust_slot->event);
+    }
+  }
+
   for (auto &cached_lock_mode_name : lock_cached_lock_mode_names) {
     ut::free(const_cast<char *>(cached_lock_mode_name.second));
   }
@@ -2142,6 +2187,20 @@ static void lock_grant(lock_t *lock) {
                          trx_get_id_for_print(lock->trx)));
 
   lock_reset_wait_and_release_thread_if_suspended(lock);
+  ut_ad(trx_mutex_own(lock->trx));
+
+  trx_mutex_exit(lock->trx);
+}
+
+/** Grants a cluster lock to a waiting cluster lock request and releases the
+waiting transaction.
+@param[in,out]    lock    waiting cluster lock request */
+void lock_clust_grant(lock_clust_t *lock) {
+  ut_ad(!trx_mutex_own(lock->trx));
+
+  trx_mutex_enter(lock->trx);
+
+  lock_clust_reset_wait_and_release_thread_if_suspended(lock);
   ut_ad(trx_mutex_own(lock->trx));
 
   trx_mutex_exit(lock->trx);

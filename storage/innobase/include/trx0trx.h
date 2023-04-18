@@ -829,6 +829,11 @@ struct trx_t {
   /** Cluster lock for scheduling. Protected by trx->mutex. */
   lock_clust_t *lock_clust;
 
+  /** query thread belonging to this trx that is in QUE_THR_LOCK_CLUST_WAIT state.
+  For threads suspended in a cluster lock wait, this is protected by the trx's
+  mutex. */
+  que_thr_t *clust_wait_thr;
+
   /**
   false:  a normal transaction
   true:   a recovered transaction
