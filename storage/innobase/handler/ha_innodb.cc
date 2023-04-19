@@ -1646,7 +1646,7 @@ static int innobase_start_trx_for(
     handlerton *hton,
     THD *thd,
     uint typ,
-    const List<Item> &args);
+    const std::vector<int> &args);
 
 /** Creates an InnoDB transaction struct for the thd if it does not yet have
  one. Starts a new InnoDB transaction if a transaction is not yet started. And
@@ -5707,15 +5707,14 @@ static int innobase_start_trx_for(
   handlerton *hton,
   THD *thd,
   uint typ,
-  const List<Item> &args)
+  const std::vector<int> &args)
 {
   // TODO(jchan): Implement.
-  std::string str;
+  std::cout << "txn type: " << typ << ", args: ";
   for (auto &arg : args) {
-    str.append(arg.full_name());
-    str.append(",");
+    std::cout << arg << ",";
   }
-  std::cout << "txn type: " << typ << ", args: " << str << std::endl;
+  std::cout << std::endl;
   return 0;
 }
 

@@ -2365,7 +2365,7 @@ int ha_release_savepoint(THD *thd, SAVEPOINT *sv) {
 struct start_trans_for_params {
   bool warn;
   uint typ;
-  List<Item> args;
+  std::vector<int> args;
 };
 
 static bool start_trans_for_handlerton(THD *thd, plugin_ref plugin, void *arg) {
@@ -2378,7 +2378,7 @@ static bool start_trans_for_handlerton(THD *thd, plugin_ref plugin, void *arg) {
   return false;
 }
 
-int ha_start_trans_for(THD *thd, uint typ, const List<Item> &args) {
+int ha_start_trans_for(THD *thd, uint typ, const std::vector<int> &args) {
   start_trans_for_params arg;
   arg.warn = true;
   arg.typ = typ;
