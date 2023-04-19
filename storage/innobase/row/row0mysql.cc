@@ -718,6 +718,23 @@ handle_new_error:
       *new_err = err;
 
       return (true);
+    case DB_LOCK_CLUST_WAIT:
+
+      DEBUG_SYNC_C("before_lock_clust_wait_suspend");
+
+      trx->error_state should be DB_SUCCESS after this function
+      // what if it isn't? only DB_INTERRUPTED possible at this point, which MySQL will roll back
+      lock_clust_wait_suspend_thread(thr);
+
+      if (trx->error_state != DB_SUCCESS) {
+        que_thr_stop_for_mysql(thr);
+
+        goto handle_new_error;
+      }
+
+      *new_err = err;
+
+      return (true);
     case DB_DEADLOCK:
     case DB_LOCK_TABLE_FULL:
       /* Roll back the whole transaction; this resolution was added
