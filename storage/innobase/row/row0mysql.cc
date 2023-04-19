@@ -958,6 +958,10 @@ void row_prebuilt_free(row_prebuilt_t *prebuilt, bool dict_locked) {
     que_graph_free_recursive(prebuilt->upd_graph);
   }
 
+  if (prebuilt->sched_graph) {
+    que_graph_free_recursive(prebuilt->sched_graph);
+  }
+
   if (prebuilt->blob_heap) {
     row_mysql_prebuilt_free_blob_heap(prebuilt);
   }
@@ -1018,6 +1022,10 @@ void row_update_prebuilt_trx(row_prebuilt_t *prebuilt, trx_t *trx) {
 
   if (prebuilt->sel_graph) {
     prebuilt->sel_graph->trx = trx;
+  }
+
+  if (prebuilt->sched_graph) {
+    prebuilt->sched_graph->trx = trx;
   }
 }
 
@@ -1730,6 +1738,20 @@ void row_prebuild_sel_graph(row_prebuilt_t *prebuilt) {
     prebuilt->sel_graph->state = QUE_FORK_ACTIVE;
   }
 }
+
+void row_prebuild_sched_graph(row_prebuilt_t *prebuilt) {
+  ut_ad(prebuilt && prebuilt->trx);
+
+  if (prebuilt->sched_graph == nullptr) {
+
+    prebuilt->sched_graph = static_cast<que_fork_t *>(que_node_get_parent(
+        pars_complete_graph_for_exec(nullptr,
+                                     prebuilt->trx, prebuilt->heap, prebuilt)));
+
+    prebuilt->sched_graph->state = QUE_FORK_ACTIVE;
+  }
+}
+
 
 /** Creates an query graph node of 'update' type to be used in the MySQL
  interface.
