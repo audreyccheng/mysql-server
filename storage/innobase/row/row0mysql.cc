@@ -718,21 +718,6 @@ handle_new_error:
       *new_err = err;
 
       return (true);
-    case DB_LOCK_CLUST_WAIT:
-
-      DEBUG_SYNC_C("before_lock_clust_wait_suspend");
-
-      lock_clust_wait_suspend_thread(thr);
-
-      if (trx->error_state != DB_SUCCESS) {
-        que_thr_stop_for_mysql(thr);
-
-        goto handle_new_error;
-      }
-
-      *new_err = err;
-
-      return (true);
     case DB_DEADLOCK:
     case DB_LOCK_TABLE_FULL:
       /* Roll back the whole transaction; this resolution was added
