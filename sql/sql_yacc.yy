@@ -2433,6 +2433,7 @@ simple_statement:
         | shutdown_stmt
         | signal_stmt                   { $$= nullptr; }
         | start                         { $$= nullptr; }
+        | start_for                     { $$= nullptr; }
         | start_replica_stmt            { $$= nullptr; }
         | stop_replica_stmt             { $$= nullptr; }
         | truncate_stmt
@@ -9366,6 +9367,35 @@ start_transaction_option:
         | READ_SYM WRITE_SYM
           {
             $$= MYSQL_START_TRANS_OPT_READ_WRITE;
+          }
+        ;
+
+start_for:
+          START_SYM TRANSACTION_SYM NUM FOR_SYM '(' opt_start_transaction_arg_list ')'
+          {
+            Lex->sql_command= SQLCOM_BEGIN;
+            Lex->start_transaction_for= true;
+
+            int error;
+            longlong trx_typ= my_strtoll10($3.str, nullptr, &error);
+            MYSQL_YYABORT_UNLESS(error <= 0);
+            Lex->start_transaction_type= trx_typ;
+          }
+        ;
+
+opt_start_transaction_arg_list:
+          /* empty */ {}
+        | start_transaction_arg_list {}
+        ;
+
+start_transaction_arg_list:
+        literal
+          {
+            Lex->start_transaction_args.push_back($1);
+          }
+        | start_transaction_arg_list ',' literal
+          {
+            Lex->start_transaction_args.push_back($3);
           }
         ;
 

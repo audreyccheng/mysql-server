@@ -265,6 +265,8 @@ bool trans_commit(THD *thd, bool ignore_global_read_lock) {
   thd->variables.option_bits &= ~OPTION_BEGIN;
   thd->get_transaction()->reset_unsafe_rollback_flags(Transaction_ctx::SESSION);
   thd->lex->start_transaction_opt = 0;
+  thd->lex->start_transaction_for = false;
+  thd->lex->start_transaction_args.clear();
 
   /* The transaction should be marked as complete in P_S. */
   assert(thd->m_transaction_psi == nullptr);
@@ -406,6 +408,8 @@ bool trans_rollback(THD *thd) {
   thd->variables.option_bits &= ~OPTION_BEGIN;
   thd->get_transaction()->reset_unsafe_rollback_flags(Transaction_ctx::SESSION);
   thd->lex->start_transaction_opt = 0;
+  thd->lex->start_transaction_for = false;
+  thd->lex->start_transaction_args.clear();
 
   /* The transaction should be marked as complete in P_S. */
   assert(thd->m_transaction_psi == nullptr);

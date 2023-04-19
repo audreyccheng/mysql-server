@@ -1636,6 +1636,18 @@ static void innodb_pre_dd_shutdown(handlerton *) {
   }
 }
 
+/** Start a parameterized transaction.
+@param[in]      hton            Handle to the handlerton structure
+@param[in]      thd             Thread/connection descriptor
+@param[in]      typ             Type of transaction
+@param[in]      args            Transaction arguments
+@return Operation status */
+static int innobase_start_trx_for(
+    handlerton *hton,
+    THD *thd,
+    uint typ,
+    const List<Item> &args);
+
 /** Creates an InnoDB transaction struct for the thd if it does not yet have
  one. Starts a new InnoDB transaction if a transaction is not yet started. And
  assigns a new snapshot for a consistent read if the transaction does not yet
@@ -5146,6 +5158,7 @@ static int innodb_init(void *p) {
   innobase_hton->panic = innodb_shutdown;
   innobase_hton->partition_flags = innobase_partition_flags;
 
+  innobase_hton->start_trans_for = innobase_start_trx_for;
   innobase_hton->start_consistent_snapshot =
       innobase_start_trx_and_assign_read_view;
 
@@ -5687,6 +5700,23 @@ void innobase_commit_low(trx_t *trx) /*!< in: transaction handle */
     ut_ad(DB_SUCCESS == error);
   }
   trx->will_lock = 0;
+}
+
+/** Registers a parameterized transaction. */
+static int innobase_start_trx_for(
+  handlerton *hton,
+  THD *thd,
+  uint typ,
+  const List<Item> &args)
+{
+  // TODO(jchan): Implement.
+  std::string str;
+  for (auto &arg : args) {
+    str.append(arg.full_name());
+    str.append(",");
+  }
+  std::cout << "txn type: " << typ << ", args: " << str << std::endl;
+  return 0;
 }
 
 /** Creates an InnoDB transaction struct for the thd if it does not yet have

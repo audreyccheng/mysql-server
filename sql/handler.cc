@@ -2359,6 +2359,38 @@ int ha_release_savepoint(THD *thd, SAVEPOINT *sv) {
   return error;
 }
 
+/**
+  This structure is passed to the start_trans_for handlerton.
+*/
+struct start_trans_for_params {
+  bool warn;
+  uint typ;
+  List<Item> args;
+};
+
+static bool start_trans_for_handlerton(THD *thd, plugin_ref plugin, void *arg) {
+  handlerton *hton = plugin_data<handlerton *>(plugin);
+  if (hton->start_trans_for) {
+    start_trans_for_params *params = (start_trans_for_params *)arg;
+    hton->start_trans_for(hton, thd, params->typ, params->args);
+    params->warn = false;
+  }
+  return false;
+}
+
+int ha_start_trans_for(THD *thd, uint typ, const List<Item> &args) {
+  start_trans_for_params arg;
+  arg.warn = true;
+  arg.typ = typ;
+  arg.args = args;
+  plugin_foreach(thd, start_trans_for_handlerton, MYSQL_STORAGE_ENGINE_PLUGIN, &arg);
+  if (arg.warn)
+    push_warning(thd, Sql_condition::SL_WARNING, ER_UNKNOWN_ERROR,
+                 "This MySQL server does not support any "
+                 "parameterized transaction capable storage engine");
+  return 0;
+}
+
 static bool snapshot_handlerton(THD *thd, plugin_ref plugin, void *arg) {
   handlerton *hton = plugin_data<handlerton *>(plugin);
   if (hton->state == SHOW_OPTION_YES && hton->start_consistent_snapshot) {
