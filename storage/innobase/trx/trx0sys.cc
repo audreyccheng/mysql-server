@@ -572,14 +572,14 @@ std::map<uint, int> trx_type_len_map;
  * @param trx_args Trx args
  * @return Index of cluster trx belongs to
  */
-uint trx_get_cluster_no(uint typ, std::vector<dfield_t> trx_args) {
+uint trx_get_cluster_no(uint typ, std::vector<int> trx_args) {
   const auto num_clusters = trx_cluster_hotkey_arr.size();
   const auto num_hotkeys = trx_cluster_hotkey_arr[0].size();
 
   int trx_arr[num_hotkeys] = { 0 };
   const auto trx_len = trx_type_len_map[typ];
   for (auto i = 0; i < trx_args.size(); ++i)
-    trx_arr[trx_args[i]] = (trx_len - i); // TODO: modify based on dfield_t
+    trx_arr[trx_args[i]] = (trx_len - i);
 
   size_t best_cluster_i = 0;
   uint best_loss = UINT32_MAX;

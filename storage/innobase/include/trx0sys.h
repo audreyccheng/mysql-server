@@ -77,7 +77,7 @@ void trx_sys_create(void);
 void trx_sys_create_sys_pages(void);
 
 /** Computes trx's cluster number given a trx and its args */
-uint trx_get_cluster_no(uint type, std::vector<dfield_t> trx_args);
+uint trx_get_cluster_no(uint type, std::vector<int> trx_args);
 
 /** Find the page number in the TRX_SYS page for a given slot/rseg_id
 @param[in]      rseg_id         slot number in the TRX_SYS page rseg array
