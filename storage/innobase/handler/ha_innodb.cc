@@ -1639,8 +1639,8 @@ static void innodb_pre_dd_shutdown(handlerton *) {
 /** Start a parameterized transaction.
 @param[in]      hton            Handle to the handlerton structure
 @param[in]      thd             Thread/connection descriptor
-@param[in]      typ             Type of transaction
-@param[in]      args            Transaction arguments
+@param[in]      typ             Transaction type
+@param[in]      args            Column indices of cluster hot key array
 @return Operation status */
 static int innobase_start_trx_for(
     handlerton *hton,
@@ -5790,8 +5790,8 @@ static int innobase_start_trx_for(
 
   innobase_register_trx(hton, current_thd, trx);
 
-  return ha_innobase::start_trx(trx, typ, args);
-  // return 0;
+  // return ha_innobase::start_trx(trx, typ, args);
+  return 0;
 }
 
 /** Creates an InnoDB transaction struct for the thd if it does not yet have

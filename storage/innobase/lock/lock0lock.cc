@@ -2281,6 +2281,44 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
   }
 }
 
+/** Computes trx's cluster given its type and arguments.
+@param[in]      typ             Type of transaction
+@param[in]      args            Transaction arguments
+@return cluster that trx belongs to */
+uint16_t trx_get_cluster_no(uint type, std::vector<int> args) {
+  /* Construct hot key array for this transaction based on type and args. */
+  std::vector<int> trx_hot_key_arr(trx_sys->num_hot_keys * 2);
+  for (size_t i = 0; i < args.size(); ++i) {
+    int val = trx_sys->trx_type_len_arr[type][i];
+
+    int index = args[i];
+    ut_ad(index < trx_sys->num_hot_keys);
+    trx_hot_key_arr[index] = val;
+  }
+
+  /* Find cluster based on difference between elements in hot key array. */
+  size_t best_cluster_i = 0;
+  uint best_loss = UINT32_MAX;
+  for (
+    size_t cluster_i = 0;
+    cluster_i < trx_sys->trx_cluster_hotkey_arr.size();
+    ++cluster_i) {
+    uint curr_loss = 0;
+    for (
+      size_t hotkey_i = 0;
+      hotkey_i < trx_sys->trx_cluster_hotkey_arr[0].size();
+      ++hotkey_i) /* L1 loss */
+      curr_loss += abs(
+        trx_sys->trx_cluster_hotkey_arr[cluster_i][hotkey_i] - trx_hot_key_arr[hotkey_i]);
+    if (curr_loss < best_loss) {
+      best_cluster_i = cluster_i;
+      best_loss = curr_loss;
+    }
+  }
+
+  return (uint16_t) best_cluster_i;
+}
+
 void lock_make_trx_hit_list(trx_t *hp_trx, hit_list_t &hit_list) {
   trx_mutex_enter(hp_trx);
   const trx_id_t hp_trx_id = hp_trx->id;
