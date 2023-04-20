@@ -722,7 +722,7 @@ handle_new_error:
 
       DEBUG_SYNC_C("before_lock_clust_wait_suspend");
 
-      trx->error_state should be DB_SUCCESS after this function
+      // trx->error_state should be DB_SUCCESS after this function
       // what if it isn't? only DB_INTERRUPTED possible at this point, which MySQL will roll back
       lock_clust_wait_suspend_thread(thr);
 
