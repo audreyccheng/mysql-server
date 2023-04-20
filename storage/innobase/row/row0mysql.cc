@@ -646,6 +646,68 @@ static void row_mysql_convert_row_to_innobase(
   }
 }
 
+/** Does an update or delete of a row for MySQL.
+@param[in,out]  prebuilt        prebuilt struct in MySQL handle
+@return error code or DB_SUCCESS */
+dberr_t schedule_trx(row_prebuilt_t *prebuilt) {
+  trx_savept_t savept;
+  dberr_t err;
+  que_thr_t *thr;
+  trx_t *trx = prebuilt->trx;
+
+  trx->op_info = "cluster scheduling";
+
+  /* The transaction should be active at this point to be scheduled */
+  ut_ad(trx_is_started(trx));
+
+  savept = trx_savept_take(trx);
+
+  /* Create a dummy sched_graph for getting a query thread to do the cluster locking. */
+  if (prebuilt->sched_graph == nullptr) {
+    row_prebuilt_sched_graph(prebuilt);
+  }
+  thr = que_fork_get_first_thr(prebuilt->sched_graph);
+
+  // TODO(accheng): do we need this?
+  ut_ad(!prebuilt->sql_stat_start);
+
+  que_thr_move_to_run_state_for_mysql(thr, trx);
+
+  thr->run_node = node;
+  thr->prev_node = node;
+
+  trx_sched_start_low(false /* queued before */);
+
+  err = trx->error_state;
+
+  if (err != DB_SUCCESS) {
+    que_thr_stop_for_mysql(thr);
+
+    if (err != DB_LOCK_CLUST_WAIT) {
+      goto error;
+    }
+
+    // TODO(accheng): we can make a new state type for tracking stats in lock0wait.cc
+    // thr->lock_state = QUE_THR_LOCK_ROW;
+
+    DEBUG_SYNC(trx->mysql_thd, "scheduling_for_mysql_error");
+
+    auto was_lock_wait = row_mysql_handle_errors(&err, trx, thr, &savept);
+
+    /* Try scheduling again after we've queued. */
+    trx_sched_start_low(true /* queued before */);
+  } else {
+    /* We should only hit this point if we're the first trx to be scheduled. */
+    DEBUG_SYNC(trx->mysql_thd, "first_trx_scheduled_for_mysql_error");
+  }
+
+  que_thr_stop_for_mysql_no_error(thr, trx);
+
+  trx->op_info = "";
+
+  return (err);
+}
+
 /** Handles user errors and lock waits detected by the database engine.
  @return true if it was a lock wait and we should continue running the
  query thread and in that case the thr is ALREADY in the running state. */

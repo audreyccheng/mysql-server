@@ -505,6 +505,8 @@ class ha_innobase : public handler {
   Item *idx_cond_push(uint keyno, Item *idx_cond) override;
   /** @} */
 
+  int start_trx(trx_t *trx, uint typ, const List<Item> &args);
+
  private:
   void update_thd();
 

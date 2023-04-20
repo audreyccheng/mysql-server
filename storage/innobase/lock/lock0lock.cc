@@ -2206,6 +2206,76 @@ void lock_clust_grant(lock_clust_t *lock) {
   trx_mutex_exit(lock->trx);
 }
 
+/** Find the next available cluster and release the cluster lock of that
+ transaction. */
+void release_next_clust() {
+  ut_ad(trx_sys_mutex_own());
+
+  /* Increment trx_sys->cluster_sched_idx until we find a waiting cluster to unlock. */
+  lock_clust_t *next_lock = NULL;
+  while (next_lock == NULL) {
+    /* TODO(accheng): we're naively skipping ahead for now but we may want to be more
+    sophisticated in the future. */
+    trx_sys->cluster_sched_idx++;
+    if (trx_sys->cluster_sched_idx == trx_sys->cluster_schedule.size()) {
+      trx_sys->cluster_sched_idx = 1;
+    }
+
+    /* TODO(accheng): eventually, we don't want to pop the cluster lock off the queue
+    immediately but check if it can be freed. */
+    uint16_t cluster = trx_sys->cluster_schedule[trx_sys->cluster_sched_idx];
+    next_lock = lock_clust_pop(cluster);
+  }
+
+  /* Release cluster lock of next available cluster in schedule. */
+  lock_clust_grant(next_lock);
+}
+
+/** Starts the scheduling process for transaction.
+ @param[in,out] queued     whether transaction has already queued on cluster lock.
+ @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
+dberr_t trx_sched_start_low(bool queued) {
+  /* Check if clust_hash needs to be resized before adding more locks. */
+  bool resized = lock_clust_resize();
+
+  /* Grab trx_sys mutex before making changes to cluster_sched_idx. */
+  mutex_enter(&trx_sys->mutex);
+
+  if (trx_sys->cluster_sched_idx == 0 || queued) {
+    /* For the first transaction to be scheduled, we need to move cluster_sched_idx
+    to its corresponding cluster. */
+    if (trx_sys->cluster_sched_idx == 0) {
+      while (trx_sys->cluster_schedule[trx_sys->cluster_sched_idx] != trx->cluster) {
+        trx_sys->cluster_sched_idx++;
+        if (trx_sys->cluster_sched_idx == trx_sys->cluster_schedule.size()) {
+          trx_sys->cluster_sched_idx = 1;
+        }
+      }
+    } else {
+      /* If the transaction has been queued before, its cluster must have been chosen
+      as the cluster to grant a lock to. */
+      ut_ad(trx_sys->cluster_schedule[trx_sys->cluster_sched_idx] == trx->cluster)
+    }
+
+    /* Allow the next waiting cluster to execute. */
+    release_next_clust();
+
+    mutex_exit(&trx_sys->mutex);
+
+    return (DB_SUCCESS);
+
+  } else {
+    mutex_exit(&trx_sys->mutex);
+
+    trx = thr_get_trx(thr);
+
+    /* Add transaction to appropriate cluster lock. */
+    queue_clust_trx(trx, thr);
+
+    return (DB_LOCK_CLUST_WAIT);
+  }
+}
+
 void lock_make_trx_hit_list(trx_t *hp_trx, hit_list_t &hit_list) {
   trx_mutex_enter(hp_trx);
   const trx_id_t hp_trx_id = hp_trx->id;

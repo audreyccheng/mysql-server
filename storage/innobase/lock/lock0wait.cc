@@ -668,6 +668,26 @@ static void lock_clust_wait_release_thread_if_suspended(que_thr_t *thr) {
   }
 }
 
+/** Add trx to appropriate cluster lock queue and stop query thread.
+ @param trx              transaction to queue on cluster lock
+ @param thr              query thread of the transaction */
+void queue_clust_trx(trx_t *trx, que_thr_t *thr) {
+  trx_mutex_enter(trx);
+
+  trx->lock_clust->trx = trx;
+  trx->lock_clust.wait_started =
+    std::chrono::system_clock::from_time_t(time(nullptr));
+
+  lock_clust_push(trx->lock_clust);
+
+  trx->error_state = DB_LOCK_CLUST_WAIT;
+
+  bool stopped = que_thr_stop(thr);
+  ut_a(stopped);
+
+  trx_mutex_exit(trx);
+}
+
 void lock_reset_wait_and_release_thread_if_suspended(lock_t *lock) {
   ut_ad(locksys::owns_lock_shard(lock));
   ut_ad(trx_mutex_own(lock->trx));

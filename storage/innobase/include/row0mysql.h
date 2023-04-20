@@ -185,6 +185,12 @@ byte *row_mysql_store_col_in_innobase_format(
                             payload data; if the column is a true
                             VARCHAR then this is irrelevant */
     ulint comp);            /*!< in: nonzero=compact format */
+
+/** Does an update or delete of a row for MySQL.
+@param[in,out]  prebuilt        prebuilt struct in MySQL handle
+@return error code or DB_SUCCESS */
+dberr_t schedule_trx(row_prebuilt_t *prebuilt);
+
 /** Handles user errors and lock waits detected by the database engine.
  @return true if it was a lock wait and we should continue running the
  query thread */

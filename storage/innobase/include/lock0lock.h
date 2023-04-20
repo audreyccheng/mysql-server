@@ -669,6 +669,15 @@ waiting transaction.
 @param[in,out]    lock    waiting cluster lock request */
 void lock_clust_grant(lock_clust_t *lock);
 
+/** Find the next available cluster and release the cluster lock of that
+ transaction. */
+void release_next_clust();
+
+/** Starts the scheduling process for transaction.
+ @param[in,out] queued     whether transaction has already queued on cluster lock.
+ @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
+dberr_t trx_sched_start_low(bool queued);
+
 /** Iterate over the granted locks which conflict with trx->lock.wait_lock and
 prepare the hit list for ASYNC Rollback.
 
@@ -912,6 +921,11 @@ void lock_wait_suspend_thread(que_thr_t *thr); /*!< in: query thread associated
  when we return. DB_INTERRUPTED is the possible error. */
 void lock_clust_wait_suspend_thread(que_thr_t *thr); /*!< in: query thread
                                                associated with the user OS thread */
+
+/** Add trx to appropriate cluster lock queue and stop query thread.
+ @param trx              transaction to queue on cluster lock
+ @param thr              query thread of the transaction */
+void queue_clust_trx(trx_t *trx, que_thr_t *thr);
 
 /** Unlocks AUTO_INC type locks that were possibly reserved by a trx. This
  function should be called at the the end of an SQL statement, by the
