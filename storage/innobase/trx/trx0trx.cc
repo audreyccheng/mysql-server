@@ -162,6 +162,8 @@ static void trx_init(trx_t *trx) {
 
   trx->op_info = "";
 
+  trx->cluster_id = 0;
+
   trx->isolation_level = TRX_ISO_REPEATABLE_READ;
 
   trx->check_foreigns = true;
@@ -271,6 +273,8 @@ struct TrxFactory {
     mutex_create(LATCH_ID_TRX_UNDO, &trx->undo_mutex);
 
     lock_trx_alloc_locks(trx);
+
+    lock_clust_trx_alloc(trx);
   }
 
   /** Release resources held by the transaction object.
@@ -322,6 +326,8 @@ struct TrxFactory {
     trx->lock.rec_pool.~lock_pool_t();
 
     trx->lock.table_pool.~lock_pool_t();
+
+    lock_clust_free(trx);
   }
 
   /** Enforce any invariants here, this is called before the transaction

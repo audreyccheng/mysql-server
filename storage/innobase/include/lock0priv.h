@@ -297,6 +297,18 @@ inline std::ostream &operator<<(std::ostream &out, const lock_t &lock) {
   return (lock.print(out));
 }
 
+/** Cluster lock, stored in cluster hash table. */
+struct lock_clust_t {
+  /** transaction owning the lock */
+  trx_t *trx;
+
+  /** The link node in a singly linked list, used by the hash table. */
+  lock_clust_t *hash;
+
+  /** Lock wait started at this time. Requires trx->mutex. */
+  std::chrono::system_clock::time_point wait_started;
+};
+
 #ifdef UNIV_DEBUG
 extern bool lock_print_waits;
 #endif /* UNIV_DEBUG */
@@ -991,6 +1003,13 @@ static inline bool lock_mode_stronger_or_eq(enum lock_mode mode1,
 /** Gets the wait flag of a lock.
  @return LOCK_WAIT if waiting, 0 if not */
 static inline ulint lock_get_wait(const lock_t *lock); /*!< in: lock */
+
+/** Pops the cluster lock at the front of cluster queue.
+ @return cluster lock, NULL if none exists */
+static inline lock_clust_t *lock_clust_pop(uint16_t cluster_id);
+
+/** Pushes a cluster lock to the back of cluster queue. */
+static inline void lock_clust_push(lock_clust_t *t);
 
 /** Checks if a transaction has the specified table lock, or stronger. This
 function should only be called by the thread that owns the transaction.
