@@ -675,7 +675,7 @@ void queue_clust_trx(trx_t *trx, que_thr_t *thr) {
   trx_mutex_enter(trx);
 
   trx->lock_clust->trx = trx;
-  trx->lock_clust.wait_started =
+  trx->lock_clust->wait_started =
     std::chrono::system_clock::from_time_t(time(nullptr));
 
   lock_clust_push(trx->lock_clust);

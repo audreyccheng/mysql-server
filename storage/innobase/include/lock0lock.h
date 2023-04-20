@@ -675,8 +675,10 @@ void release_next_clust();
 
 /** Starts the scheduling process for transaction.
  @param[in,out] queued     whether transaction has already queued on cluster lock.
+ @param[in,out]  trx             transaction
+ @param[in,out]  thr             query thread of transaction
  @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
-dberr_t trx_sched_start_low(bool queued);
+dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr);
 
 /** Iterate over the granted locks which conflict with trx->lock.wait_lock and
 prepare the hit list for ASYNC Rollback.

@@ -664,7 +664,7 @@ dberr_t schedule_trx(row_prebuilt_t *prebuilt) {
 
   /* Create a dummy sched_graph for getting a query thread to do the cluster locking. */
   if (prebuilt->sched_graph == nullptr) {
-    row_prebuilt_sched_graph(prebuilt);
+    row_prebuild_sched_graph(prebuilt);
   }
   thr = que_fork_get_first_thr(prebuilt->sched_graph);
 
@@ -673,19 +673,15 @@ dberr_t schedule_trx(row_prebuilt_t *prebuilt) {
 
   que_thr_move_to_run_state_for_mysql(thr, trx);
 
-  thr->run_node = node;
-  thr->prev_node = node;
+  thr->run_node = thr;
+  thr->prev_node = thr;
 
-  trx_sched_start_low(false /* queued before */);
+  trx_sched_start_low(false /* queued before */, trx, thr);
 
   err = trx->error_state;
 
   if (err != DB_SUCCESS) {
     que_thr_stop_for_mysql(thr);
-
-    if (err != DB_LOCK_CLUST_WAIT) {
-      goto error;
-    }
 
     // TODO(accheng): we can make a new state type for tracking stats in lock0wait.cc
     // thr->lock_state = QUE_THR_LOCK_ROW;
@@ -693,9 +689,15 @@ dberr_t schedule_trx(row_prebuilt_t *prebuilt) {
     DEBUG_SYNC(trx->mysql_thd, "scheduling_for_mysql_error");
 
     auto was_lock_wait = row_mysql_handle_errors(&err, trx, thr, &savept);
+    /* We should always have to wait for a cluster lock if we weren't the first
+    transaction to be scheduled. */
+    if(!was_lock_wait) {
+      DEBUG_SYNC(trx->mysql_thd, "lock_wait_for_mysql_error");
+      ut_ad(was_lock_wait);
+    }
 
     /* Try scheduling again after we've queued. */
-    trx_sched_start_low(true /* queued before */);
+    trx_sched_start_low(true /* queued before */, trx, thr);
   } else {
     /* We should only hit this point if we're the first trx to be scheduled. */
     DEBUG_SYNC(trx->mysql_thd, "first_trx_scheduled_for_mysql_error");

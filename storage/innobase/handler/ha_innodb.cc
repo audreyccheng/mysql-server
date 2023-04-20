@@ -5791,6 +5791,7 @@ static int innobase_start_trx_for(
   innobase_register_trx(hton, current_thd, trx);
 
   return ha_innobase::start_trx(trx, typ, args);
+  // return 0;
 }
 
 /** Creates an InnoDB transaction struct for the thd if it does not yet have
