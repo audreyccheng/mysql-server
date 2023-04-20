@@ -239,13 +239,16 @@ static inline ulint lock_get_wait(const lock_t *lock) /*!< in: lock */
 }
 
 static inline lock_clust_t *lock_clust_pop(uint16_t cluster_id) {
+  ut_ad(trx_sys->num_clusters <= cluster_id);
+
   lock_clust_t *found;
   rw_lock_t *hash_lock = hash_get_lock(lock_sys->cluster_hash, cluster_id);
   rw_lock_x_lock(hash_lock, UT_LOCATION_HERE);
-  found = (lock_clust_t *)hash_get_first(lock_sys->cluster_hash,
-                          hash_calc_cell_id(cluster_id, lock_sys->cluster_hash));
-  if (found)
+  found = static_cast<lock_clust_t *>(hash_get_first(lock_sys->cluster_hash,
+                          hash_calc_cell_id(cluster_id, lock_sys->cluster_hash)));
+  if (found) {
     HASH_DELETE(lock_clust_t, hash, lock_sys->cluster_hash, cluster_id, found);
+  }
   rw_lock_x_unlock(hash_lock);
   return found;
 }
