@@ -238,6 +238,10 @@ dberr_t row_lock_table(row_prebuilt_t *prebuilt);
 /** Builds a dummy query graph used in selects. */
 void row_prebuild_sel_graph(row_prebuilt_t *prebuilt); /*!< in: prebuilt struct
                                                        in MySQL handle */
+
+/** Builds a dummy query graph used in cluster scheduling. */
+void row_prebuild_sched_graph(row_prebuilt_t *prebuilt); /*!< in: prebuilt struct
+                                                         in MySQL handle */
 /** Gets pointer to a prebuilt update vector used in updates. If the update
  graph has not yet been built in the prebuilt struct, then this function
  first builds it.
@@ -613,22 +617,24 @@ struct row_prebuilt_t {
   we must retrieve all columns in the
   key (if read_just_key == 1), or all
   columns in the table */
-  upd_node_t *upd_node;   /*!< Innobase SQL update node used
-                          to perform updates and deletes */
-  trx_id_t trx_id;        /*!< The table->def_trx_id when
-                          ins_graph was built */
-  que_fork_t *ins_graph;  /*!< Innobase SQL query graph used
-                          in inserts. Will be rebuilt on
-                          trx_id or n_indexes mismatch. */
-  que_fork_t *upd_graph;  /*!< Innobase SQL query graph used
-                          in updates or deletes */
-  btr_pcur_t *pcur;       /*!< persistent cursor used in selects
-                          and updates */
-  btr_pcur_t *clust_pcur; /*!< persistent cursor used in
-                          some selects and updates */
-  que_fork_t *sel_graph;  /*!< dummy query graph used in
-                          selects */
-  dtuple_t *search_tuple; /*!< prebuilt dtuple used in selects */
+  upd_node_t *upd_node;    /*!< Innobase SQL update node used
+                           to perform updates and deletes */
+  trx_id_t trx_id;         /*!< The table->def_trx_id when
+                           ins_graph was built */
+  que_fork_t *ins_graph;   /*!< Innobase SQL query graph used
+                           in inserts. Will be rebuilt on
+                           trx_id or n_indexes mismatch. */
+  que_fork_t *upd_graph;   /*!< Innobase SQL query graph used
+                           in updates or deletes */
+  btr_pcur_t *pcur;        /*!< persistent cursor used in selects
+                           and updates */
+  btr_pcur_t *clust_pcur;  /*!< persistent cursor used in
+                           some selects and updates */
+  que_fork_t *sel_graph;   /*!< dummy query graph used in
+                           selects */
+  que_fork_t *sched_graph; /*!< dummy query graph used in
+                           cluster scheduling */
+  dtuple_t *search_tuple;  /*!< prebuilt dtuple used in selects */
 
   /** prebuilt dtuple used in selects where the end of range is known */
   dtuple_t *m_stop_tuple;
