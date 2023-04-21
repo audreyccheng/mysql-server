@@ -1636,7 +1636,17 @@ static void innodb_pre_dd_shutdown(handlerton *) {
   }
 }
 
-static int start_trx(THD *thd, trx_t *trx, uint typ, const List<Item> &args);
+/** Helper function to start a transaction for scheduling.
+@param[in]      thd             Thread/connection descriptor
+@param[in]      trx             Transaction to start
+@param[in]      typ             Transaction type
+@param[in]      args            Column indices of cluster hot key array
+@return Operation status */
+static int start_trx(
+  THD *thd,
+  trx_t *trx,
+  uint typ,
+  const std::vector<int> &args);
 
 /** Start a parameterized transaction.
 @param[in]      hton            Handle to the handlerton structure
@@ -5738,7 +5748,7 @@ static int innobase_start_trx_for(
   for (auto &arg : args) {
     std::cout << arg << ",";
   }
-  std::cout << "txn type: " << typ << ", args: " << str << std::endl;
+  std::cout << std::endl;
   // return 0;
 
   DBUG_TRACE;
