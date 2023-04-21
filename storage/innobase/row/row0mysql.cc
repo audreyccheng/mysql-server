@@ -646,6 +646,75 @@ static void row_mysql_convert_row_to_innobase(
   }
 }
 
+static void build_sched_graph(trx_t *trx) {
+  ut_ad(trx->sched_graph == nullptr);
+  ut_ad(trx->sched_heap == nullptr);
+  trx->sched_heap = mem_heap_create(512, UT_LOCATION_HERE);
+  trx->sched_graph = static_cast<que_fork_t *>(que_node_get_parent(
+      pars_complete_graph_for_exec(nullptr, trx, trx->sched_heap, nullptr)));
+  trx->sched_graph->state = QUE_FORK_ACTIVE;
+}
+
+/** Schedules a transaction.
+@param[in,out]  trx transaction to schedule
+@return error code or DB_SUCCESS */
+dberr_t schedule_trx(trx_t *trx) {
+  trx_savept_t savept;
+  dberr_t err;
+  que_thr_t *thr;
+
+  trx->op_info = "cluster scheduling";
+
+  /* The transaction should be active at this point to be scheduled */
+  ut_ad(trx_is_started(trx));
+
+  savept = trx_savept_take(trx);
+
+  /* Create a dummy sched_graph for getting a query thread to do the cluster locking. */
+  if (trx->sched_graph == nullptr) {
+    build_sched_graph(trx);
+  }
+  thr = que_fork_get_first_thr(trx->sched_graph);
+
+  que_thr_move_to_run_state_for_mysql(thr, trx);
+
+  thr->run_node = thr;
+  thr->prev_node = thr;
+
+  trx_sched_start_low(false /* queued before */, trx, thr);
+
+  err = trx->error_state;
+
+  if (err != DB_SUCCESS) {
+    que_thr_stop_for_mysql(thr);
+
+    // TODO(accheng): we can make a new state type for tracking stats in lock0wait.cc
+    // thr->lock_state = QUE_THR_LOCK_ROW;
+
+    DEBUG_SYNC(trx->mysql_thd, "scheduling_for_mysql_error");
+
+    auto was_lock_wait = row_mysql_handle_errors(&err, trx, thr, &savept);
+    /* We should always have to wait for a cluster lock if we weren't the first
+    transaction to be scheduled. */
+    if(!was_lock_wait) {
+      DEBUG_SYNC(trx->mysql_thd, "lock_wait_for_mysql_error");
+      ut_ad(was_lock_wait);
+    }
+
+    /* Try scheduling again after we've queued. */
+    trx_sched_start_low(true /* queued before */, trx, thr);
+  } else {
+    /* We should only hit this point if we're the first trx to be scheduled. */
+    DEBUG_SYNC(trx->mysql_thd, "first_trx_scheduled_for_mysql_error");
+  }
+
+  que_thr_stop_for_mysql_no_error(thr, trx);
+
+  trx->op_info = "";
+
+  return (err);
+}
+
 /** Handles user errors and lock waits detected by the database engine.
  @return true if it was a lock wait and we should continue running the
  query thread and in that case the thr is ALREADY in the running state. */
@@ -722,6 +791,8 @@ handle_new_error:
 
       DEBUG_SYNC_C("before_lock_clust_wait_suspend");
 
+      // trx->error_state should be DB_SUCCESS after this function
+      // what if it isn't? only DB_INTERRUPTED possible at this point, which MySQL will roll back
       lock_clust_wait_suspend_thread(thr);
 
       if (trx->error_state != DB_SUCCESS) {

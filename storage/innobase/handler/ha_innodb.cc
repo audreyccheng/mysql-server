@@ -1636,11 +1636,13 @@ static void innodb_pre_dd_shutdown(handlerton *) {
   }
 }
 
+static int start_trx(THD *thd, trx_t *trx, uint typ, const List<Item> &args);
+
 /** Start a parameterized transaction.
 @param[in]      hton            Handle to the handlerton structure
 @param[in]      thd             Thread/connection descriptor
-@param[in]      typ             Type of transaction
-@param[in]      args            Transaction arguments
+@param[in]      typ             Transaction type
+@param[in]      args            Column indices of cluster hot key array
 @return Operation status */
 static int innobase_start_trx_for(
     handlerton *hton,
@@ -5702,6 +5704,28 @@ void innobase_commit_low(trx_t *trx) /*!< in: transaction handle */
   trx->will_lock = 0;
 }
 
+static int start_trx(THD *thd, trx_t *trx, uint typ, const std::vector<int> &args) {
+  int err;
+  dberr_t error;
+
+  // TODO(accheng): add stats eventually?
+  // ha_statistic_increment(&System_status_var::ha_update_count);
+
+  error = schedule_trx(trx);
+
+  if (error != DB_SUCCESS) {
+    /* Something is wrong during transaction scheduling. */
+    goto func_exit;
+  }
+
+func_exit:
+
+  err =
+      convert_error_code_to_mysql(error, 0, thd);
+
+  return err;
+}
+
 /** Registers a parameterized transaction. */
 static int innobase_start_trx_for(
   handlerton *hton,
@@ -5714,8 +5738,50 @@ static int innobase_start_trx_for(
   for (auto &arg : args) {
     std::cout << arg << ",";
   }
-  std::cout << std::endl;
-  return 0;
+  std::cout << "txn type: " << typ << ", args: " << str << std::endl;
+  // return 0;
+
+  DBUG_TRACE;
+  assert(hton == innodb_hton_ptr);
+
+  /* Create a new trx struct for thd, if it does not yet have one */
+
+  trx_t *trx = check_trx_exists(thd);
+
+  TrxInInnoDB trx_in_innodb(trx);
+
+  innobase_srv_conc_force_exit_innodb(trx);
+
+  /* The transaction should not be active yet, start it */
+  ut_ad(!trx_is_started(trx));
+
+  trx_start_if_not_started_xa(trx, false, UT_LOCATION_HERE);
+
+  ut_a(trx->clust_wait_thr == nullptr);
+
+  /* Assign a cluster id for this transaction. */
+  trx->cluster_id = trx_get_cluster_no(typ, args);
+
+  /* Assign a read view if the transaction does not have it yet.
+  Do this only if transaction is using REPEATABLE READ isolation
+  level. */
+  trx->isolation_level =
+      innobase_trx_map_isolation_level(thd_get_trx_isolation(thd));
+
+  // TODO(accheng): support other isolation levels eventually?
+  if (trx->isolation_level != TRX_ISO_SERIALIZABLE) {
+    push_warning_printf(thd, Sql_condition::SL_WARNING, HA_ERR_UNSUPPORTED,
+                        "InnoDB: Cluster scheudling can only"
+                        " be used with"
+                        " SERIALIZABLE isolation level.");
+    trx->isolation_level = TRX_ISO_SERIALIZABLE;
+  }
+
+  /* Set the MySQL flag to mark that there is an active transaction */
+
+  innobase_register_trx(hton, current_thd, trx);
+
+  return start_trx(thd, trx, typ, args);
 }
 
 /** Creates an InnoDB transaction struct for the thd if it does not yet have

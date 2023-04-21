@@ -185,6 +185,12 @@ byte *row_mysql_store_col_in_innobase_format(
                             payload data; if the column is a true
                             VARCHAR then this is irrelevant */
     ulint comp);            /*!< in: nonzero=compact format */
+
+/** Does an update or delete of a row for MySQL.
+@param[in,out]  prebuilt        prebuilt struct in MySQL handle
+@return error code or DB_SUCCESS */
+dberr_t schedule_trx(trx_t *trx);
+
 /** Handles user errors and lock waits detected by the database engine.
  @return true if it was a lock wait and we should continue running the
  query thread */
@@ -238,6 +244,7 @@ dberr_t row_lock_table(row_prebuilt_t *prebuilt);
 /** Builds a dummy query graph used in selects. */
 void row_prebuild_sel_graph(row_prebuilt_t *prebuilt); /*!< in: prebuilt struct
                                                        in MySQL handle */
+
 /** Gets pointer to a prebuilt update vector used in updates. If the update
  graph has not yet been built in the prebuilt struct, then this function
  first builds it.
@@ -625,9 +632,9 @@ struct row_prebuilt_t {
   btr_pcur_t *pcur;       /*!< persistent cursor used in selects
                           and updates */
   btr_pcur_t *clust_pcur; /*!< persistent cursor used in
-                          some selects and updates */
+                           some selects and updates */
   que_fork_t *sel_graph;  /*!< dummy query graph used in
-                          selects */
+                           selects */
   dtuple_t *search_tuple; /*!< prebuilt dtuple used in selects */
 
   /** prebuilt dtuple used in selects where the end of range is known */

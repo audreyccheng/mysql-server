@@ -563,15 +563,31 @@ struct trx_sys_t {
 
   char pad8[ut::INNODB_CACHE_LINE_SIZE];
 
-  /* Number of distinct clusters. */
+  /** Number of distinct clusters. */
   uint16_t num_clusters;
 
-  /* Index for cluster schedule (protected by trx_sys_mutex). */
+  /** Number of distinct hot keys. */
+  uint16_t num_hot_keys;
+
+  /** Number of transaction types. */
+  uint16_t num_trx_types;
+
+  /** Index for cluster schedule (protected by trx_sys_mutex). */
   uint32_t cluster_sched_idx;
 
-  /* Cluster schedule index cooresponding to clusters vector.
-     First value is a no-op cluster. */
+  /** Cluster schedule index corresponding to clusters vector.
+  First value is a no-op cluster. */
   std::vector<uint32_t> cluster_sched;
+
+  /** Array of cluster hot key vectors where each row is a cluster and each
+  column represents a hot key. Even columns are reads to hot keys while
+  odd columns are writes. */
+  std::vector<std::vector<int>> trx_cluster_hotkey_arr;
+
+  /** Array of transaction types with estimated hot key access lengths.
+  Each row is a transaction type and each entry in a row is ordered based on
+  argument order. */
+  std::vector<std::vector<int>> trx_type_len_arr;
 
   /** @} */
 

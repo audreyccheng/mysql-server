@@ -557,9 +557,43 @@ purge_pq_t *trx_sys_init_at_db_start(void) {
 
 /** Set cluster schedule.
     TODO(accheng): cluster schedule is currently hardcoded. */
-void set_cluster_sched() {
+static void set_cluster_sched() {
   for (uint32_t i = 0; i < trx_sys->cluster_sched.size(); i++) {
     trx_sys->cluster_sched[i] = 1;
+  }
+}
+
+/** Set cluster hot key array.
+    TODO(accheng): currently hardcoded. */
+static void set_trx_cluster_hotkey_arr() {
+  std::vector<std::vector<int>> hardcoded_arr {
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 },
+    { 0, 0, 0, 0, 0 }
+    };
+
+  for (uint32_t i = 0; i < trx_sys->trx_cluster_hotkey_arr.size(); i++) {
+    for (uint32_t j = 0; j < trx_sys->trx_cluster_hotkey_arr[0].size(); j++) {
+      trx_sys->trx_cluster_hotkey_arr[i][j] = hardcoded_arr[i][j];
+    }
+  }
+}
+
+/** Set trx type array.
+    TODO(accheng): currently hardcoded. */
+static void set_trx_type_len_arr() {
+  std::vector<std::vector<int>> hardcoded_arr {
+    { 0, 0},
+    { 0, 0},
+    { 0, 0},
+    { 0, 0}
+    };
+
+  for (uint32_t i = 0; i < trx_sys->trx_type_len_arr.size(); i++) {
+    for (uint32_t j = 0; j < trx_sys->trx_type_len_arr[0].size(); j++) {
+      trx_sys->trx_type_len_arr[i][j] = hardcoded_arr[i][j];
+    }
   }
 }
 
@@ -593,12 +627,31 @@ void trx_sys_create(void) {
   /* TODO(accheng): number of clusters is currently hardcoded. */
   trx_sys->num_clusters = 1;
 
+  /* TODO(accheng): number of hot keys is currently hardcoded. */
+  trx_sys->num_hot_keys = 1;
+
+  /* TODO(accheng): number of trx types is currently hardcoded. */
+  trx_sys->num_trx_types = 1;
+
   trx_sys->cluster_sched_idx = 0;
 
   /* TODO(accheng): cluster length is currently hardcoded. */
   new (&trx_sys->cluster_sched)(decltype(trx_sys->cluster_sched))();
-  trx_sys->cluster_sched.resize(trx_sys->num_clusters);
+  trx_sys->cluster_sched.resize(101);
   set_cluster_sched();
+
+  new (&trx_sys->trx_cluster_hotkey_arr)(decltype(trx_sys->trx_cluster_hotkey_arr))();
+  trx_sys->trx_cluster_hotkey_arr.resize(
+    trx_sys->num_clusters,
+    std::vector<int>(trx_sys->num_hot_keys * 2));
+  set_trx_cluster_hotkey_arr();
+
+  /* TODO(accheng): size of this arr is currently hardcoded. */
+  new (&trx_sys->trx_type_len_arr)(decltype(trx_sys->trx_type_len_arr))();
+  trx_sys->trx_type_len_arr.resize(
+    trx_sys->num_trx_types,
+    std::vector<int>(trx_sys->num_hot_keys));
+  set_trx_type_len_arr();
 
   new (&trx_sys->rsegs) Rsegs();
   trx_sys->rsegs.set_empty();
@@ -672,6 +725,10 @@ void trx_sys_close(void) {
   trx_sys->rw_trx_ids.~trx_ids_t();
 
   trx_sys->cluster_sched.~vector<uint32_t>();
+
+  trx_sys->trx_cluster_hotkey_arr.~vector<std::vector<int>>();
+
+  trx_sys->trx_type_len_arr.~vector<std::vector<int>>();
 
   ut::free(trx_sys);
 

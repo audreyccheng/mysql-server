@@ -403,12 +403,13 @@ bool cluster_hash_resize() {
   }
   ut_a(lock_sys->max_cluster_hash_size > num_clusters);
   hash_create_sync_obj(
-    lock_sys->cluster_hash, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
+    table, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
 
   HASH_MIGRATE(old_hash, lock_sys->cluster_hash, lock_clust_t, hash,
                lock_clust_lock_hash_value);
 
   hash_unlock_x_all(old_hash);
+  lock_sys->cluster_hash = table;
 
   /* Empty cluster hash table and free the memory heaps. */
   ut_ad(old_hash->magic_n == hash_table_t::HASH_TABLE_MAGIC_N);
@@ -2203,6 +2204,127 @@ void lock_clust_grant(lock_clust_t *lock) {
   ut_ad(trx_mutex_own(lock->trx));
 
   trx_mutex_exit(lock->trx);
+}
+
+/** Find the next available cluster and release the cluster lock of that
+ transaction. */
+void release_next_clust() {
+  ut_ad(trx_sys_mutex_own());
+
+  /* Increment trx_sys->cluster_sched_idx until we find a waiting cluster to unlock. */
+  lock_clust_t *next_lock = NULL;
+  int cnt = trx_sys->cluster_sched.size();
+  while (next_lock == NULL) {
+    /* Iterate through the entire schedule once. If we can't find any waiting transactions,
+    reset the cluster_sched_idx to 0 so the next transaction won't be blocked. */
+    if (cnt == 0) {
+      trx_sys->cluster_sched_idx = 0;
+      return;
+    }
+    cnt--;
+    /* TODO(accheng): we're naively skipping ahead for now but we may want to be more
+    sophisticated in the future. */
+    trx_sys->cluster_sched_idx++;
+    if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size()) {
+      trx_sys->cluster_sched_idx = 1;
+    }
+
+    /* TODO(accheng): eventually, we don't want to pop the cluster lock off the queue
+    immediately but check if it can be freed. */
+    uint16_t cluster = trx_sys->cluster_sched[trx_sys->cluster_sched_idx];
+    next_lock = lock_clust_pop(cluster);
+  }
+
+  /* Release cluster lock of next available cluster in schedule. */
+  lock_clust_grant(next_lock);
+}
+
+/** Starts the scheduling process for transaction.
+ @param[in,out] queued     whether transaction has already queued on cluster lock.
+@param[in,out]  trx             transaction
+ @param[in,out]  thr             query thread of transaction
+ @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
+dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
+  /* Check if clust_hash needs to be resized before adding more locks. */
+  bool resized = lock_clust_resize();
+  if (resized) {
+    DEBUG_SYNC_C("lock_clust_resize");
+  }
+
+  /* Grab trx_sys mutex before making changes to cluster_sched_idx. */
+  mutex_enter(&trx_sys->mutex);
+
+  if (trx_sys->cluster_sched_idx == 0 || queued) {
+    /* For the first transaction to be scheduled, we need to move cluster_sched_idx
+    to its corresponding cluster. */
+    if (trx_sys->cluster_sched_idx == 0) {
+      while (trx_sys->cluster_sched[trx_sys->cluster_sched_idx] != trx->cluster_id) {
+        trx_sys->cluster_sched_idx++;
+        if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size()) {
+          trx_sys->cluster_sched_idx = 1;
+        }
+      }
+    } else {
+      /* If the transaction has been queued before, its cluster must have been chosen
+      as the cluster to grant a lock to. */
+      ut_ad(trx_sys->cluster_sched[trx_sys->cluster_sched_idx] == trx->cluster_id);
+    }
+
+    /* Allow the next waiting cluster to execute. */
+    release_next_clust();
+
+    mutex_exit(&trx_sys->mutex);
+
+    return (DB_SUCCESS);
+
+  } else {
+    mutex_exit(&trx_sys->mutex);
+
+    trx = thr_get_trx(thr);
+
+    /* Add transaction to appropriate cluster lock. */
+    queue_clust_trx(trx, thr);
+
+    return (DB_LOCK_CLUST_WAIT);
+  }
+}
+
+/** Computes trx's cluster given its type and arguments.
+@param[in]      typ             Type of transaction
+@param[in]      args            Transaction arguments
+@return cluster that trx belongs to */
+uint16_t trx_get_cluster_no(uint type, std::vector<int> args) {
+  /* Construct hot key array for this transaction based on type and args. */
+  std::vector<int> trx_hot_key_arr(trx_sys->num_hot_keys * 2);
+  for (size_t i = 0; i < args.size(); ++i) {
+    int val = trx_sys->trx_type_len_arr[type][i];
+
+    int index = args[i];
+    ut_ad(index < trx_sys->num_hot_keys * 2);
+    trx_hot_key_arr[index] = val;
+  }
+
+  /* Find cluster based on difference between elements in hot key array. */
+  size_t best_cluster_i = 0;
+  uint best_loss = UINT32_MAX;
+  for (
+    size_t cluster_i = 0;
+    cluster_i < trx_sys->trx_cluster_hotkey_arr.size();
+    ++cluster_i) {
+    uint curr_loss = 0;
+    for (
+      size_t hotkey_i = 0;
+      hotkey_i < trx_sys->trx_cluster_hotkey_arr[0].size();
+      ++hotkey_i) /* L1 loss */
+      curr_loss += abs(
+        trx_sys->trx_cluster_hotkey_arr[cluster_i][hotkey_i] - trx_hot_key_arr[hotkey_i]);
+    if (curr_loss < best_loss) {
+      best_cluster_i = cluster_i;
+      best_loss = curr_loss;
+    }
+  }
+
+  return (uint16_t) best_cluster_i;
 }
 
 void lock_make_trx_hit_list(trx_t *hp_trx, hit_list_t &hit_list) {
