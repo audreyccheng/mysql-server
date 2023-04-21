@@ -460,7 +460,8 @@ void lock_wait_suspend_thread(que_thr_t *thr) {
 void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   srv_slot_t *slot;
   trx_t *trx;
-  std::chrono::steady_clock::time_point start_time;
+  // TODO(accheng): for stats
+  // std::chrono::steady_clock::time_point start_time;
 
   trx = thr_get_trx(thr);
 
@@ -540,25 +541,6 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   /* Release the slot for others to use */
 
   lock_clust_wait_table_release_slot(slot);
-
-  if (thr->lock_state == QUE_THR_LOCK_ROW) {
-    const auto diff_time = std::chrono::steady_clock::now() - start_time;
-
-    srv_stats.n_lock_wait_current_count.dec();
-    srv_stats.n_lock_wait_time.add(
-        std::chrono::duration_cast<std::chrono::microseconds>(diff_time)
-            .count());
-
-    if (diff_time > lock_sys->n_lock_max_wait_time) {
-      lock_sys->n_lock_max_wait_time = diff_time;
-    }
-
-    /* Record the lock wait time for this thread */
-    thd_set_lock_wait_time(trx->mysql_thd, diff_time);
-
-    DBUG_EXECUTE_IF("lock_instrument_slow_query_log",
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1)););
-  }
 
   // TODO(accheng): add stats and thd wait time for cluster lock
   // if (thr->lock_state == QUE_THR_LOCK_ROW) {

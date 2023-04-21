@@ -9375,6 +9375,7 @@ start_for:
           {
             Lex->sql_command= SQLCOM_BEGIN;
             Lex->start_transaction_for= true;
+            Lex->start_transaction_opt= 0;
 
             int error;
             longlong trx_typ= my_strtoll10($3.str, nullptr, &error);

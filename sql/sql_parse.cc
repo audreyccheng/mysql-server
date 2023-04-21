@@ -4241,8 +4241,15 @@ int mysql_execute_command(THD *thd, bool first_level) {
     }
     case SQLCOM_BEGIN:
       if (lex->start_transaction_for) {
+        std::vector<int> args;
+        for (Item &arg: lex->start_transaction_args) {
+          String str;
+          arg.val_str(&str);
+          int a = std::stoi(str.ptr());
+          args.push_back(a);
+        }
         if (ha_start_trans_for(thd, lex->start_transaction_type,
-                           lex->start_transaction_args)) goto error;
+                               args)) goto error;
       }
       if (trans_begin(thd, lex->start_transaction_opt)) goto error;
       my_ok(thd);

@@ -1088,7 +1088,7 @@ struct lock_sys_t {
   /** Padding to avoid false sharing of wait_mutex field */
   char pad2[ut::INNODB_CACHE_LINE_SIZE];
 
-  /** The mutex protecting the next two fields */
+  /** The mutex protecting the next four fields */
   Lock_mutex wait_mutex;
 
   /** Array of user threads suspended while waiting for locks within InnoDB.

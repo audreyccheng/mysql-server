@@ -5734,10 +5734,9 @@ static int innobase_start_trx_for(
   const std::vector<int> &args)
 {
   // TODO(jchan): Implement.
-  std::string str;
+  std::cout << "txn type: " << typ << ", args: ";
   for (auto &arg : args) {
-    str.append(arg.full_name());
-    str.append(",");
+    std::cout << arg << ",";
   }
   std::cout << "txn type: " << typ << ", args: " << str << std::endl;
   // return 0;
