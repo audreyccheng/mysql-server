@@ -357,6 +357,8 @@ struct TrxFactory {
     ut_a(trx->lock.wait_lock == nullptr);
     ut_a(trx->lock.blocking_trx.load() == nullptr);
 
+    ut_a(trx->clust_wait_thr == nullptr);
+
     ut_a(!trx->has_search_latch);
 
     ut_a(trx->dict_operation_lock_mode == 0);
