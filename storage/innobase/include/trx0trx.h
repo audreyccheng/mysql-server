@@ -871,6 +871,9 @@ struct trx_t {
   /** Current isolation level */
   isolation_level_t isolation_level;
 
+  mem_heap_t *sched_heap;
+  que_fork_t *sched_graph;
+
   bool check_foreigns; /*!< normally true, but if the user
                        wants to suppress foreign key checks,
                        (in table imports, for example) we

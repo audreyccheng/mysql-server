@@ -402,12 +402,12 @@ bool cluster_hash_resize() {
   }
   ut_a(lock_sys->max_cluster_hash_size > num_clusters);
   hash_create_sync_obj(
-    lock_sys->cluster_hash, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
+    table, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
 
   HASH_MIGRATE(old_hash, table, lock_clust_t, hash, lock_clust_lock_hash_value);
 
-  lock_sys->cluster_hash = table;
   hash_unlock_x_all(old_hash);
+  lock_sys->cluster_hash = table;
 
   /* Empty cluster hash table and free the memory heaps. */
   ut_ad(old_hash->magic_n == hash_table_t::HASH_TABLE_MAGIC_N);
@@ -2259,7 +2259,7 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
     } else {
       /* If the transaction has been queued before, its cluster must have been chosen
       as the cluster to grant a lock to. */
-      ut_ad(trx_sys->cluster_sched[trx_sys->cluster_sched_idx] == trx->cluster_id)
+      ut_ad(trx_sys->cluster_sched[trx_sys->cluster_sched_idx] == trx->cluster_id);
     }
 
     /* Allow the next waiting cluster to execute. */
