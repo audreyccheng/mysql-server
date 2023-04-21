@@ -5711,10 +5711,6 @@ static int start_trx(THD *thd, trx_t *trx, uint typ, const List<Item> &args) {
   // TODO(accheng): add stats eventually?
   // ha_statistic_increment(&System_status_var::ha_update_count);
 
-  if (error != DB_SUCCESS) {
-    goto func_exit;
-  }
-
   error = schedule_trx(trx);
 
   if (error != DB_SUCCESS) {

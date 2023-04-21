@@ -2213,7 +2213,13 @@ void release_next_clust() {
 
   /* Increment trx_sys->cluster_sched_idx until we find a waiting cluster to unlock. */
   lock_clust_t *next_lock = NULL;
+  int cnt = trx_sys->cluster_sched.size();
   while (next_lock == NULL) {
+    if (cnt == 0) {
+      trx_sys->cluster_sched_idx = 0;
+      return;
+    }
+    cnt--;
     /* TODO(accheng): we're naively skipping ahead for now but we may want to be more
     sophisticated in the future. */
     trx_sys->cluster_sched_idx++;
