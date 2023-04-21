@@ -403,13 +403,12 @@ bool cluster_hash_resize() {
   }
   ut_a(lock_sys->max_cluster_hash_size > num_clusters);
   hash_create_sync_obj(
-    table, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
+    lock_sys->cluster_hash, LATCH_ID_HASH_TABLE_RW_LOCK, num_clusters);
 
   HASH_MIGRATE(old_hash, lock_sys->cluster_hash, lock_clust_t, hash,
                lock_clust_lock_hash_value);
 
   hash_unlock_x_all(old_hash);
-  lock_sys->cluster_hash = table;
 
   /* Empty cluster hash table and free the memory heaps. */
   ut_ad(old_hash->magic_n == hash_table_t::HASH_TABLE_MAGIC_N);
