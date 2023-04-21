@@ -216,6 +216,33 @@ que_thr_t *que_thr_end_lock_wait(trx_t *trx) /*!< in: transaction with que_state
   return !was_active ? thr : nullptr;
 }
 
+/** Moves a suspended query thread to running state and may release
+ a worker thread to execute it. This function should be used to end
+ the wait state of a query thread waiting for a cluster lock.
+ @return the query thread that needs to be released. */
+que_thr_t *que_thr_end_lock_clust_wait(trx_t *trx) /*!< in: transaction */
+{
+  ut_ad(trx_mutex_own(trx));
+
+  que_thr_t *const thr = trx->clust_wait_thr;
+
+  ut_ad(thr != nullptr);
+
+  /* This is the only possible state here for scheduling. */
+  ut_a(thr->state == QUE_THR_LOCK_CLUST_WAIT);
+
+  bool const was_active = thr->is_active;
+
+  que_thr_move_to_run_state(thr);
+
+  trx->clust_wait_thr = nullptr;
+
+  /* In MySQL we let the OS thread (not just the query thread) to wait
+  for the lock to be released: */
+
+  return !was_active ? thr : nullptr;
+}
+
 /** Inits a query thread for a command. */
 static inline void que_thr_init_command(que_thr_t *thr) /*!< in: query thread */
 {
@@ -256,6 +283,7 @@ que_thr_t *que_fork_scheduler_round_robin(
 
       case QUE_THR_SUSPENDED:
       case QUE_THR_LOCK_WAIT:
+      case QUE_THR_LOCK_CLUST_WAIT:
       default:
         ut_error;
     }
@@ -326,6 +354,7 @@ que_thr_t *que_fork_start_command(que_fork_t *fork) /*!< in: a query fork */
 
       case QUE_THR_RUNNING:
       case QUE_THR_LOCK_WAIT:
+      case QUE_THR_LOCK_CLUST_WAIT:
       case QUE_THR_PROCEDURE_WAIT:
         ut_error;
     }
@@ -603,6 +632,10 @@ bool que_thr_stop(que_thr_t *thr) {
     trx->lock.wait_thr = thr;
     thr->state = QUE_THR_LOCK_WAIT;
 
+  } else if (trx->error_state == DB_LOCK_CLUST_WAIT) {
+    trx->clust_wait_thr = thr;
+    thr->state = QUE_THR_LOCK_CLUST_WAIT;
+
   } else if (trx->error_state != DB_SUCCESS &&
              trx->error_state != DB_LOCK_WAIT) {
     /* Error handling built for the MySQL interface */
@@ -692,7 +725,8 @@ void que_thr_stop_for_mysql(que_thr_t *thr) /*!< in: query thread */
   trx_mutex_enter(trx);
 
   if (thr->state == QUE_THR_RUNNING) {
-    if (trx->error_state != DB_SUCCESS && trx->error_state != DB_LOCK_WAIT) {
+    if (trx->error_state != DB_SUCCESS && trx->error_state != DB_LOCK_WAIT
+    && trx->error_state != DB_LOCK_CLUST_WAIT) {
       /* Error handling built for the MySQL interface */
       thr->state = QUE_THR_COMPLETED;
     } else {
@@ -706,6 +740,7 @@ void que_thr_stop_for_mysql(que_thr_t *thr) /*!< in: query thread */
     }
   }
 
+  // TODO(accheng): check that this will still be true for cluster wait
   ut_ad(thr->is_active == true);
   ut_ad(trx->lock.n_active_thrs == 1);
   ut_ad(thr->graph->n_active_thrs == 1);
@@ -1017,6 +1052,24 @@ loop:
       if (thr_get_trx(thr)->error_state != DB_SUCCESS) {
         /* thr was chosen as a deadlock victim or there was
         a lock wait timeout */
+
+        que_thr_dec_refer_count(thr, nullptr);
+        trx_mutex_exit(thr_get_trx(thr));
+        break;
+      }
+
+      trx_mutex_exit(thr_get_trx(thr));
+      goto loop;
+
+    case QUE_THR_LOCK_CLUST_WAIT:
+      lock_clust_wait_suspend_thread(thr);
+
+      trx_mutex_enter(thr_get_trx(thr));
+
+      ut_a(thr_get_trx(thr)->id != 0);
+
+      if (thr_get_trx(thr)->error_state != DB_SUCCESS) {
+        /* thr was interrupted */
 
         que_thr_dec_refer_count(thr, nullptr);
         trx_mutex_exit(thr_get_trx(thr));
