@@ -2215,6 +2215,8 @@ void release_next_clust() {
   lock_clust_t *next_lock = NULL;
   int cnt = trx_sys->cluster_sched.size();
   while (next_lock == NULL) {
+    /* Iterate through the entire schedule once. If we can't find any waiting transactions,
+    reset the cluster_sched_idx to 0 so the next transaction won't be blocked. */
     if (cnt == 0) {
       trx_sys->cluster_sched_idx = 0;
       return;
@@ -2298,7 +2300,7 @@ uint16_t trx_get_cluster_no(uint type, std::vector<int> args) {
     int val = trx_sys->trx_type_len_arr[type][i];
 
     int index = args[i];
-    ut_ad(index < trx_sys->num_hot_keys);
+    ut_ad(index < trx_sys->num_hot_keys * 2);
     trx_hot_key_arr[index] = val;
   }
 

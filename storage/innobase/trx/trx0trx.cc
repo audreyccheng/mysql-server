@@ -510,8 +510,9 @@ static void trx_free(trx_t *&trx) {
   to pool */
   ut_ad(trx->will_lock == 0);
 
-  if (trx->sched_heap)
+  if (trx->sched_heap) {
     mem_heap_free(trx->sched_heap);
+  }
 
   trx_pools->mem_free(trx);
 
