@@ -460,7 +460,8 @@ void lock_wait_suspend_thread(que_thr_t *thr) {
 void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   srv_slot_t *slot;
   trx_t *trx;
-  std::chrono::steady_clock::time_point start_time;
+  // TODO(accheng): for stats
+  // std::chrono::steady_clock::time_point start_time;
 
   trx = thr_get_trx(thr);
 
