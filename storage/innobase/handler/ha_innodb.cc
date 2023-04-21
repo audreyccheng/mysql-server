@@ -1646,7 +1646,7 @@ static int innobase_start_trx_for(
     handlerton *hton,
     THD *thd,
     uint typ,
-    const List<Item> &args);
+    const std::vector<int> &args);
 
 /** Creates an InnoDB transaction struct for the thd if it does not yet have
  one. Starts a new InnoDB transaction if a transaction is not yet started. And
@@ -5702,7 +5702,7 @@ void innobase_commit_low(trx_t *trx) /*!< in: transaction handle */
   trx->will_lock = 0;
 }
 
-int ha_innobase::start_trx(trx_t *trx, uint typ, const List<Item> &args) {
+int ha_innobase::start_trx(trx_t *trx, uint typ, const std::vector<int> &args) {
   int err;
   dberr_t error;
 
@@ -5739,7 +5739,7 @@ static int innobase_start_trx_for(
   handlerton *hton,
   THD *thd,
   uint typ,
-  const List<Item> &args)
+  const std::vector<int> &args)
 {
   // TODO(jchan): Implement.
   std::string str;
@@ -5769,7 +5769,7 @@ static int innobase_start_trx_for(
   ut_a(trx->clust_wait_thr == nullptr);
 
   /* Assign a cluster id for this transaction. */
-  // trx->cluster_id = trx_get_cluster_no(typ, args);
+  trx->cluster_id = trx_get_cluster_no(typ, args);
 
   /* Assign a read view if the transaction does not have it yet.
   Do this only if transaction is using REPEATABLE READ isolation
