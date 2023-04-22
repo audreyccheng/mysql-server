@@ -379,11 +379,12 @@ bool cluster_hash_resize() {
   hash_unlock_x_all(old_hash);
 
   /* TODO(accheng): cluster hash size threshold is currently hardcoded. */
-  if (lock_sys->max_cluster_hash_size > n + 100) {
+  if (lock_sys->max_cluster_hash_size > n + 10000) {
     /* Resizing must have already occurred so we can exit. */
     return false;
   }
 
+  lock_sys->max_cluster_hash_size *= 2;
   hash_table_t *table = ut::new_<hash_table_t>(lock_sys->max_cluster_hash_size);
 
   mutex_enter(&trx_sys->mutex);
@@ -391,7 +392,6 @@ bool cluster_hash_resize() {
   mutex_exit(&trx_sys->mutex);
 
   hash_lock_x_all(old_hash);
-  lock_sys->max_cluster_hash_size *= 2;
   /* Number of sync rw-objects must be a power of 2. */
   if (!ut_is_2pow(num_clusters)) {
     num_clusters--;
@@ -444,7 +444,7 @@ bool lock_clust_resize() {
   size_t n = hash_get_n_cells(lock_sys->cluster_hash);
 
   /* TODO(accheng): cluster hash size threshold is currently hardcoded. */
-  if (lock_sys->max_cluster_hash_size <= n + 100) {
+  if (lock_sys->max_cluster_hash_size <= n + 10000) {
     return cluster_hash_resize();
   }
 
