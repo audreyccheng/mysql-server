@@ -1,0 +1,19 @@
+connect (con1,localhost,root,);
+
+--echo connection default
+connection default;
+set session transaction isolation level serializable;
+start transaction 1 for ();
+
+--echo connection con1
+connection con1;
+set session transaction isolation level serializable;
+start transaction 2 for ();
+
+--echo connection default
+connection default;
+commit;
+
+--echo connection con1
+connection con1;
+commit;

@@ -1,0 +1,10 @@
+connection default
+set session transaction isolation level serializable;
+start transaction 1 for ();
+connection con1
+set session transaction isolation level serializable;
+start transaction 2 for ();
+connection default
+commit;
+connection con1
+commit;

@@ -332,6 +332,10 @@ struct TrxFactory {
     ut_a(trx->clust_wait_thr == nullptr);
 
     lock_clust_free(trx);
+
+    if (trx->sched_heap) {
+      mem_heap_free(trx->sched_heap);
+    }
   }
 
   /** Enforce any invariants here, this is called before the transaction
@@ -511,10 +515,6 @@ static void trx_free(trx_t *&trx) {
   /* trx locking state should have been reset before returning trx
   to pool */
   ut_ad(trx->will_lock == 0);
-
-  if (trx->sched_heap) {
-    mem_heap_free(trx->sched_heap);
-  }
 
   trx_pools->mem_free(trx);
 

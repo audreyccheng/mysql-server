@@ -559,7 +559,7 @@ purge_pq_t *trx_sys_init_at_db_start(void) {
     TODO(accheng): cluster schedule is currently hardcoded. */
 static void set_cluster_sched() {
   for (uint32_t i = 0; i < trx_sys->cluster_sched.size(); i++) {
-    trx_sys->cluster_sched[i] = 1;
+    trx_sys->cluster_sched[i] = 0;
   }
 }
 
