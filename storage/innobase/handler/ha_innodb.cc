@@ -5765,12 +5765,16 @@ static int innobase_start_trx_for(
   /* The transaction should not be active yet, start it */
   ut_ad(!trx_is_started(trx));
 
-  trx_start_if_not_started_xa(trx, false, UT_LOCATION_HERE);
+  trx_start_if_not_started_xa(trx, true, UT_LOCATION_HERE);
 
   ut_a(trx->clust_wait_thr == nullptr);
 
   /* Assign a cluster id for this transaction. */
-  trx->cluster_id = trx_get_cluster_no(typ, args);
+  // TODO(jchan): Commented because the trx type array is hardcoded, so args
+  // may cause out-of-bounds access.
+  //
+  // trx->cluster_id = trx_get_cluster_no(typ, args);
+  trx->cluster_id = 0;
 
   /* Assign a read view if the transaction does not have it yet.
   Do this only if transaction is using REPEATABLE READ isolation
@@ -5788,7 +5792,6 @@ static int innobase_start_trx_for(
   }
 
   /* Set the MySQL flag to mark that there is an active transaction */
-
   innobase_register_trx(hton, current_thd, trx);
 
   return start_trx(thd, trx, typ, args);

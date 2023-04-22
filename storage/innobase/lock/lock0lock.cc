@@ -376,21 +376,22 @@ bool cluster_hash_resize() {
   old_hash = lock_sys->cluster_hash;
   hash_lock_x_all(old_hash);
   size_t n = hash_get_n_cells(lock_sys->cluster_hash);
+  hash_unlock_x_all(old_hash);
 
   /* TODO(accheng): cluster hash size threshold is currently hardcoded. */
   if (lock_sys->max_cluster_hash_size > n + 100) {
     /* Resizing must have already occurred so we can exit. */
-    hash_unlock_x_all(old_hash);
     return false;
   }
 
-  lock_sys->max_cluster_hash_size *= 2;
   hash_table_t *table = ut::new_<hash_table_t>(lock_sys->max_cluster_hash_size);
 
   mutex_enter(&trx_sys->mutex);
   uint16_t num_clusters = trx_sys->num_clusters;
   mutex_exit(&trx_sys->mutex);
 
+  hash_lock_x_all(old_hash);
+  lock_sys->max_cluster_hash_size *= 2;
   /* Number of sync rw-objects must be a power of 2. */
   if (!ut_is_2pow(num_clusters)) {
     num_clusters--;
@@ -407,8 +408,8 @@ bool cluster_hash_resize() {
   HASH_MIGRATE(old_hash, table, lock_clust_t, hash,
                lock_clust_lock_hash_value);
 
-  hash_unlock_x_all(old_hash);
   lock_sys->cluster_hash = table;
+  hash_unlock_x_all(old_hash);
 
   /* Empty cluster hash table and free the memory heaps. */
   ut_ad(old_hash->magic_n == hash_table_t::HASH_TABLE_MAGIC_N);
