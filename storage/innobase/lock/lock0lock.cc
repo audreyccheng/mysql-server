@@ -340,7 +340,7 @@ void lock_sys_create(
   }
 
   /* TODO(accheng): starting size of cluster hash is currently hardcoded. */
-  size_t starting_size = 10000;
+  size_t starting_size = 100000;
   ut_a(starting_size > num_clusters);
   lock_sys->cluster_hash = ut::new_<hash_table_t>(starting_size);
   hash_create_sync_obj(

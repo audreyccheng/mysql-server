@@ -558,8 +558,15 @@ purge_pq_t *trx_sys_init_at_db_start(void) {
 /** Set cluster schedule.
     TODO(accheng): cluster schedule is currently hardcoded. */
 static void set_cluster_sched() {
+  std::vector<int> arr {0, /* No-op */
+    0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,
+    0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,
+    2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,
+    2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3
+  };
+
   for (uint32_t i = 0; i < trx_sys->cluster_sched.size(); i++) {
-    trx_sys->cluster_sched[i] = 0;
+    trx_sys->cluster_sched[i] = arr[i];
   }
 }
 
@@ -567,10 +574,10 @@ static void set_cluster_sched() {
     TODO(accheng): currently hardcoded. */
 static void set_trx_cluster_hotkey_arr() {
   std::vector<std::vector<int>> hardcoded_arr {
-    { 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0 }
+    { 12, 0, 0, 0, 0, 1, 0, 1},
+    { 0, 0, 12, 0, 0, 1, 0, 1},
+    { 0, 1, 0, 1, 12, 0, 0, 0},
+    { 0, 1, 0, 1, 0, 0, 12, 0}
     };
 
   for (uint32_t i = 0; i < trx_sys->trx_cluster_hotkey_arr.size(); i++) {
@@ -584,10 +591,8 @@ static void set_trx_cluster_hotkey_arr() {
     TODO(accheng): currently hardcoded. */
 static void set_trx_type_len_arr() {
   std::vector<std::vector<int>> hardcoded_arr {
-    { 0, 0},
-    { 0, 0},
-    { 0, 0},
-    { 0, 0}
+    { 12, 1},
+    { 1, 12},
     };
 
   for (uint32_t i = 0; i < trx_sys->trx_type_len_arr.size(); i++) {
@@ -625,13 +630,13 @@ void trx_sys_create(void) {
   }
 
   /* TODO(accheng): number of clusters is currently hardcoded. */
-  trx_sys->num_clusters = 1;
+  trx_sys->num_clusters = 4;
 
   /* TODO(accheng): number of hot keys is currently hardcoded. */
-  trx_sys->num_hot_keys = 1;
+  trx_sys->num_hot_keys = 4;
 
   /* TODO(accheng): number of trx types is currently hardcoded. */
-  trx_sys->num_trx_types = 1;
+  trx_sys->num_trx_types = 2;
 
   trx_sys->cluster_sched_idx = 0;
 
