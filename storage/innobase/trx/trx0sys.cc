@@ -655,7 +655,7 @@ void trx_sys_create(void) {
   new (&trx_sys->trx_type_len_arr)(decltype(trx_sys->trx_type_len_arr))();
   trx_sys->trx_type_len_arr.resize(
     trx_sys->num_trx_types,
-    std::vector<int>(trx_sys->num_hot_keys));
+     std::vector<int>(2)); //trx_sys->num_hot_keys)
   set_trx_type_len_arr();
 
   new (&trx_sys->rsegs) Rsegs();
