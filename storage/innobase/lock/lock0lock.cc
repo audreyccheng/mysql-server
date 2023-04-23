@@ -2243,10 +2243,10 @@ void release_next_clust() {
  @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
 dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
   /* Check if clust_hash needs to be resized before adding more locks. */
-  bool resized = lock_clust_resize();
-  if (resized) {
-    DEBUG_SYNC_C("lock_clust_resize");
-  }
+  // bool resized = lock_clust_resize();
+  // if (resized) {
+  //   DEBUG_SYNC_C("lock_clust_resize");
+  // }
 
   /* Grab trx_sys mutex before making changes to cluster_sched_idx. */
   mutex_enter(&trx_sys->mutex);
