@@ -5744,11 +5744,11 @@ static int innobase_start_trx_for(
   const std::vector<int> &args)
 {
   // TODO(jchan): Implement.
-  std::cout << "txn type: " << typ << ", args: ";
-  for (auto &arg : args) {
-    std::cout << arg << ",";
-  }
-  std::cout << std::endl;
+  // std::cout << "txn type: " << typ << ", args: ";
+  // for (auto &arg : args) {
+  //   std::cout << arg << ",";
+  // }
+  // std::cout << std::endl;
   // return 0;
 
   DBUG_TRACE;
