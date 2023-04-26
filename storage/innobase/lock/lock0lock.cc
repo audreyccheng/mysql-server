@@ -2204,7 +2204,7 @@ void lock_clust_grant(lock_clust_t *lock) {
 }
 
 static uint32_t next_sched_idx() {
-  uint32_t idx = trx_sys->cluster_sched_idx + 1
+  uint32_t idx = trx_sys->cluster_sched_idx + 1;
   if (idx == trx_sys->cluster_sched.size()) {
     idx = 1;
   }
