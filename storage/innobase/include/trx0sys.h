@@ -572,7 +572,8 @@ struct trx_sys_t {
   /** Number of transaction types. */
   uint16_t num_trx_types;
 
-  /** Index for cluster schedule (protected by trx_sys_mutex). */
+  /** Index for most recently executed clulster in cluster schedule
+  (protected by trx_sys_mutex). */
   uint32_t cluster_sched_idx;
 
   /** Cluster schedule index corresponding to clusters vector.

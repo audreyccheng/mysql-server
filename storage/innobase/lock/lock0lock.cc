@@ -2203,39 +2203,51 @@ void lock_clust_grant(lock_clust_t *lock) {
   trx_mutex_exit(lock->trx);
 }
 
+static uint32_t next_sched_idx() {
+  uint32_t idx = trx_sys->cluster_sched_idx + 1
+  if (idx == trx_sys->cluster_sched.size()) {
+    idx = 1;
+  }
+  return idx;
+}
+
 /** Find the next available cluster and release the cluster lock of that
  transaction. */
 void release_next_clust() {
   ut_ad(trx_sys_mutex_own());
 
-  /* Make sure deps have been fulfilled before releasing current trx in sched. */
-  uint32_t needed_deps = trx_sys->sched_deps[trx_sys->cluster_sched_idx];
+  /* The first allowed transaction to be scheduled hasn't run yet. */
+  if (trx_sys->cluster_sched_idx == 0) {
+    return;
+  }
+
+  uint32_t next_idx = next_sched_idx();
+
+  /* Make sure deps have been fulfilled before releasing next trx in sched. */
+  uint32_t needed_deps = trx_sys->sched_deps[next_idx];
   if (needed_deps != 0) {
-    if ((int) needed_deps != trx_sys->sched_counts[trx_sys->cluster_sched_idx]->load()) {
+    if ((int) needed_deps != trx_sys->sched_counts[next_idx]->load()) {
       return;
     }
   }
 
-  /* TODO(accheng): for now, we stall until we can find the appropriate cluster
-  to release. */
-  lock_clust_t *next_lock = NULL;
-  while (next_lock == NULL) {
-    uint16_t cluster = trx_sys->cluster_sched[trx_sys->cluster_sched_idx];
-    next_lock = lock_clust_pop(cluster);
+  /* Try to release next cluster. If a trx is not yet available, another arriving trx
+  will allow us to make progress. */
+  uint16_t cluster = trx_sys->cluster_sched[next_idx];
+  lock_clust_t *next_lock = lock_clust_pop(cluster);
+  if (next_lock == NULL) {
+    return;
   }
 
   /* Clear out dep count for this cluster. */
   if (needed_deps != 0) {
-    trx_sys->sched_counts[trx_sys->cluster_sched_idx]->store(0);
+    trx_sys->sched_counts[next_idx]->store(0);
   }
 
   /* Release cluster lock. */
   lock_clust_grant(next_lock);
 
-  trx_sys->cluster_sched_idx++;
-  if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size()) {
-    trx_sys->cluster_sched_idx = 1;
-  }
+  trx_sys->cluster_sched_idx = next_idx;
 }
 
 /** Starts the scheduling process for transaction.
@@ -2267,10 +2279,6 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
 
     return (DB_SUCCESS);
   } else if (queued) {
-    /* If the transaction has been queued before, its cluster must have been chosen
-    as the cluster to grant a lock to. */
-    ut_ad(trx_sys->cluster_sched[trx_sys->cluster_sched_idx] == trx->cluster_id);
-
     /* Try to release the next waiting cluster. */
     release_next_clust();
 
@@ -2278,14 +2286,8 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
 
     return (DB_SUCCESS);
   } else {
-    /* Check if the cluster deps have been fulfilled and if a transaction should be
-    released. */
-    uint32_t needed_deps = trx_sys->sched_deps[trx_sys->cluster_sched_idx];
-    if (needed_deps != 0) {
-      if ((int) needed_deps == trx_sys->sched_counts[trx_sys->cluster_sched_idx]->load()) {
-        release_next_clust();
-      }
-    }
+    /* Try to release the next waiting cluster. */
+    release_next_clust();
 
     mutex_exit(&trx_sys->mutex);
 
