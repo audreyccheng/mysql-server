@@ -277,6 +277,10 @@ struct TrxFactory {
     lock_trx_alloc_locks(trx);
 
     lock_clust_trx_alloc(trx);
+
+    // TODO(accheng): number of deps for a transaction is hardcoded.
+    new (&trx->dep_indicies)(decltype(trx->dep_indicies))();
+    trx->dep_indicies.resize(1);
   }
 
   /** Release resources held by the transaction object.
@@ -328,6 +332,8 @@ struct TrxFactory {
     trx->lock.rec_pool.~lock_pool_t();
 
     trx->lock.table_pool.~lock_pool_t();
+
+    trx->dep_indicies.~vector<uint32_t>();
 
     ut_a(trx->clust_wait_thr == nullptr);
 
@@ -3096,6 +3102,11 @@ dberr_t trx_prepare_for_mysql(trx_t *trx) {
   if (trx_in_innodb.is_aborted() &&
       trx->killed_by != std::this_thread::get_id()) {
     return (DB_FORCED_ABORT);
+  }
+
+  /* Update child deps of this trx. */
+  for (uint32_t idx : trx->dep_indicies) {
+    trx_sys->sched_counts[idx]->fetch_add(1);
   }
 
   trx->op_info = "preparing";

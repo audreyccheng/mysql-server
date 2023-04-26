@@ -579,6 +579,18 @@ struct trx_sys_t {
   First value is a no-op cluster. */
   std::vector<uint32_t> cluster_sched;
 
+  /** Array of dep indicies for each cluster. Each row is a cluster
+  and the number of deps can vary per cluster. */
+  std::vector<std::vector<uint32_t>> cluster_deps_arr;
+
+  /** Each entry represents the count needed. Corresponds to
+  cluster_sched. Not protected by trx_sys_t mutex. */
+  std::vector<uint32_t> sched_deps;
+
+  /** Each entry represents current count. Corresponds
+  to cluster_sched. Not protected by trx_sys_t mutex. */
+  std::vector<ut::unique_ptr<std::atomic_int>> sched_counts;
+
   /** Array of cluster hot key vectors where each row is a cluster and each
   column represents a hot key. Even columns are reads to hot keys while
   odd columns are writes. */

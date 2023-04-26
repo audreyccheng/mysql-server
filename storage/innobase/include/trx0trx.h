@@ -865,8 +865,11 @@ struct trx_t {
                        current operation, or an empty
                        string */
 
-  /** Scheduling cluster that this transaction is assigned to. */
+  /* Scheduling cluster that this transaction is assigned to. */
   uint16_t cluster_id;
+
+  /* List of indices for which we should increment dep counts. */
+  std::vector<uint32_t> dep_indicies;
 
   /** Current isolation level */
   isolation_level_t isolation_level;

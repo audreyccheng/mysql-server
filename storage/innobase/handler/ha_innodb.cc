@@ -5773,8 +5773,11 @@ static int innobase_start_trx_for(
   // TODO(jchan): Commented because the trx type array is hardcoded, so args
   // may cause out-of-bounds access.
   //
-  // trx->cluster_id = trx_get_cluster_no(typ, args);
-  trx->cluster_id = 0;
+  trx->cluster_id = trx_get_cluster_no(typ, args);
+  // trx->cluster_id = 0;
+
+  /* Set indicies that this trx will need to increment deps for. */
+  trx_get_deps(trx->cluster_id, trx->dep_indicies);
 
   /* Assign a read view if the transaction does not have it yet.
   Do this only if transaction is using REPEATABLE READ isolation

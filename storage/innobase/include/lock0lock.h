@@ -686,6 +686,11 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr);
 @return cluster that trx belongs to */
 uint16_t trx_get_cluster_no(uint type, std::vector<int> args);
 
+/** Computes trx's cluster given its type and arguments.
+@param[in]      cluster_id      Cluster id of transaction
+@param[in]      deps            Deps vector of transaction */
+void trx_get_deps(uint16_t cluster_id, std::vector<uint32_t> &deps);
+
 /** Iterate over the granted locks which conflict with trx->lock.wait_lock and
 prepare the hit list for ASYNC Rollback.
 
