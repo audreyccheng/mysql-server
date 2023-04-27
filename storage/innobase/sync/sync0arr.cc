@@ -888,6 +888,8 @@ bool sync_array_print_long_waits(
 
 #ifndef UNIV_NO_ERR_MSGS
     lock_set_timeout_event();
+
+    clust_lock_set_timeout_event();
 #endif /* !UNIV_NO_ERR_MSGS */
 
     std::this_thread::sleep_for(std::chrono::seconds(30));

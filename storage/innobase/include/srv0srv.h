@@ -200,6 +200,9 @@ struct Srv_threads {
   /** Thread detecting lock wait timeouts. */
   IB_thread m_lock_wait_timeout;
 
+  /** Thread detecting cluster lock wait timeouts. */
+  IB_thread m_clust_lock_wait_timeout;
+
   /** The master thread. */
   IB_thread m_master;
 
@@ -813,6 +816,7 @@ extern mysql_pfs_key_t page_flush_thread_key;
 extern mysql_pfs_key_t recv_writer_thread_key;
 extern mysql_pfs_key_t srv_error_monitor_thread_key;
 extern mysql_pfs_key_t srv_lock_timeout_thread_key;
+extern mysql_pfs_key_t srv_clust_lock_timeout_thread_key;
 extern mysql_pfs_key_t srv_master_thread_key;
 extern mysql_pfs_key_t srv_monitor_thread_key;
 extern mysql_pfs_key_t srv_purge_thread_key;

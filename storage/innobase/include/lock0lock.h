@@ -669,6 +669,9 @@ waiting transaction.
 @param[in,out]    lock    waiting cluster lock request */
 void lock_clust_grant(lock_clust_t *lock);
 
+/** Get the next idx for the schedule based on clust_sched_idx. */
+uint32_t next_sched_idx();
+
 /** Find the next available cluster and release the cluster lock of that
  transaction. */
 void release_next_clust();
@@ -916,10 +919,18 @@ bool lock_table_has_locks(const dict_table_t *table);
 /** A thread which wakes up threads whose lock wait may have lasted too long. */
 void lock_wait_timeout_thread();
 
+/** A thread which wakes up threads whose cluster lock wait may have lasted too
+and releases them. */
+void clust_lock_wait_timeout_thread();
+
 /** Notifies the thread which analyzes wait-for-graph that there was
  at least one new edge added or modified ( trx->blocking_trx has changed ),
  so that the thread will know it has to analyze it. */
 void lock_wait_request_check_for_cycles();
+
+/** Notifies the thread that manages cluster lock timeout that a cluster lock
+ has been acquired. */
+void clust_lock_wait_request_check_for_cycles();
 
 /** Puts a user OS thread to wait for a lock to be released. If an error
  occurs during the wait trx->error_state associated with thr is != DB_SUCCESS
@@ -968,6 +979,9 @@ bool lock_cancel_if_waiting_and_release(TrxVersion trx_version);
 
 /** Set the lock system timeout event. */
 void lock_set_timeout_event();
+
+/** Set the lock system cluster timeout event. */
+void clust_lock_set_timeout_event();
 
 /** Checks that a transaction id is sensible, i.e., not in the future.
 Emits an error otherwise.
@@ -1122,6 +1136,10 @@ struct lock_sys_t {
   /** Set to the event that is created in the lock wait monitor thread. A value
   of 0 means the thread is not active */
   os_event_t timeout_event;
+
+  /** Set to the event that is created in the cluster lock wait monitor thread.
+  A value of 0 means the thread is not active */
+  os_event_t clust_timeout_event;
 
   /** Max size for cluster hash before resizing is needed. */
   size_t max_cluster_hash_size;

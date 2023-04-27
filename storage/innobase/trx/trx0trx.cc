@@ -2225,6 +2225,17 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
   DBUG_EXECUTE_IF("ib_trx_commit_crash_before_trx_commit_start",
                   DBUG_SUICIDE(););
 
+  // std::cout << "committing" << std::endl;
+  /* Update child deps of this trx. */
+  for (uint32_t idx : trx->dep_indicies) {
+    if (idx != 0) {
+      trx_sys->sched_counts[idx]->fetch_add(1);
+      // std::cout << " idx: " << idx << " now " << trx_sys->sched_counts[idx]->load() << std::endl;
+    }
+    //
+  }
+  // std::cout << std::endl;
+
   if (trx_is_rseg_updated(trx)) {
     mtr = &local_mtr;
 
@@ -3102,11 +3113,6 @@ dberr_t trx_prepare_for_mysql(trx_t *trx) {
   if (trx_in_innodb.is_aborted() &&
       trx->killed_by != std::this_thread::get_id()) {
     return (DB_FORCED_ABORT);
-  }
-
-  /* Update child deps of this trx. */
-  for (uint32_t idx : trx->dep_indicies) {
-    trx_sys->sched_counts[idx]->fetch_add(1);
   }
 
   trx->op_info = "preparing";

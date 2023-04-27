@@ -192,6 +192,7 @@ mysql_pfs_key_t io_read_thread_key;
 mysql_pfs_key_t io_write_thread_key;
 mysql_pfs_key_t srv_error_monitor_thread_key;
 mysql_pfs_key_t srv_lock_timeout_thread_key;
+mysql_pfs_key_t srv_clust_lock_timeout_thread_key;
 mysql_pfs_key_t srv_master_thread_key;
 mysql_pfs_key_t srv_monitor_thread_key;
 mysql_pfs_key_t srv_purge_thread_key;
@@ -1362,6 +1363,9 @@ static const Thread_to_stop threads_to_stop[]{
     {"lock_wait_timeout", srv_threads.m_lock_wait_timeout,
      lock_set_timeout_event, SRV_SHUTDOWN_CLEANUP},
 
+    {"clust_lock_wait_timeout", srv_threads.m_clust_lock_wait_timeout,
+     clust_lock_set_timeout_event, SRV_SHUTDOWN_CLEANUP},
+
     {"error_monitor", srv_threads.m_error_monitor,
      []() { os_event_set(srv_error_event); }, SRV_SHUTDOWN_CLEANUP},
 
@@ -2415,6 +2419,13 @@ dberr_t srv_start(bool create_new_db) {
         srv_lock_timeout_thread_key, 0, lock_wait_timeout_thread);
 
     srv_threads.m_lock_wait_timeout.start();
+
+    /* Create the thread which watches the timeouts
+    for cluster lock waits */
+    srv_threads.m_clust_lock_wait_timeout = os_thread_create(
+        srv_clust_lock_timeout_thread_key, 0, clust_lock_wait_timeout_thread);
+
+    srv_threads.m_clust_lock_wait_timeout.start();
 
     /* Create the thread which warns of long semaphore waits */
     srv_threads.m_error_monitor = os_thread_create(srv_error_monitor_thread_key,
