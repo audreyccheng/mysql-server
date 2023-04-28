@@ -576,6 +576,9 @@ struct trx_sys_t {
   (protected by trx_sys_mutex). */
   uint32_t cluster_sched_idx;
 
+  /** Number of waiting cluster locks (protected by trx_sys_mutex). */
+  uint32_t waiting_clust_locks;
+
   /** Cluster schedule index corresponding to clusters vector.
   First value is a no-op cluster. */
   std::vector<uint32_t> cluster_sched;

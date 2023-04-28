@@ -2227,14 +2227,26 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
 
   // std::cout << "committing" << std::endl;
   /* Update child deps of this trx. */
-  for (uint32_t idx : trx->dep_indicies) {
-    if (idx != 0) {
-      trx_sys->sched_counts[idx]->fetch_add(1);
-      // std::cout << " idx: " << idx << " now " << trx_sys->sched_counts[idx]->load() << std::endl;
-    }
-    //
+  // for (uint32_t idx : trx->dep_indicies) {
+  //   if (idx != 0) {
+  //     trx_sys->sched_counts[idx]->fetch_add(1);
+  //     // std::cout << " idx: " << idx << " now " << trx_sys->sched_counts[idx]->load() << std::endl;
+  //   }
+  //   //
+  // }
+  trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
+  // std::cout << "committing cluster: " << trx->cluster_id <<
+  // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+
+  mutex_enter(&trx_sys->mutex);
+  // trx_sys->waiting_clust_locks--;
+  if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+    // std::cout << "deps done: " << trx->cluster_id << std::endl;
+
+    /* Release the next waiting cluster. */
+    release_next_clust();
   }
-  // std::cout << std::endl;
+  mutex_exit(&trx_sys->mutex);
 
   if (trx_is_rseg_updated(trx)) {
     mtr = &local_mtr;
