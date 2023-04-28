@@ -2235,8 +2235,8 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
   //   //
   // }
   trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
-  // std::cout << "committing cluster: " << trx->cluster_id <<
-  // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+  std::cout << "committing cluster: " << trx->cluster_id <<
+  " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
 
   mutex_enter(&trx_sys->mutex);
   // trx_sys->waiting_clust_locks--;

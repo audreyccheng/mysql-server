@@ -665,6 +665,10 @@ void queue_clust_trx(trx_t *trx, que_thr_t *thr) {
 
   lock_clust_push(trx->lock_clust);
 
+  /* Update number of locks queued. */
+  std::cout << "queue_clust_trx cluster: " << trx->cluster_id << std::endl;
+  lock_sys->clust_locks_queued[trx->cluster_id]->fetch_add(1);
+
   trx->error_state = DB_LOCK_CLUST_WAIT;
 
   bool stopped = que_thr_stop(thr);
