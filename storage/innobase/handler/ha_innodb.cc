@@ -5733,7 +5733,7 @@ func_exit:
   err =
       convert_error_code_to_mysql(error, 0, thd);
 
-  std::cout << "start_trx" << err << std::endl;
+  std::cout << "start_trx-" << err << std::endl;
   return err;
 }
 

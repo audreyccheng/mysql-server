@@ -321,8 +321,6 @@ void lock_sys_create(
 
   lock_sys->timeout_event = os_event_create();
 
-  lock_sys->clust_timeout_event = os_event_create();
-
   lock_sys->rec_hash = ut::new_<hash_table_t>(n_cells);
   lock_sys->prdt_hash = ut::new_<hash_table_t>(n_cells);
   lock_sys->prdt_page_hash = ut::new_<hash_table_t>(n_cells);
@@ -539,8 +537,6 @@ void lock_sys_close(void) {
   lock_sys->clust_locks_queued.~vector<ut::unique_ptr<std::atomic_int>>();
 
   os_event_destroy(lock_sys->timeout_event);
-
-  os_event_destroy(lock_sys->clust_timeout_event);
 
   mutex_destroy(&lock_sys->wait_mutex);
 
@@ -2242,96 +2238,6 @@ uint32_t prev_sched_idx(trx_t &trx) {
 
 /** Find the next available cluster and release the cluster lock of that
  transaction. */
-// void release_next_clust() {
-//   ut_ad(trx_sys_mutex_own());
-
-//   /* The first allowed transaction to be scheduled hasn't run yet. */
-//   if (trx_sys->cluster_sched_idx == 0) {
-//     return;
-//   }
-
-//   bool found = false;
-//   while (!found) {
-//     uint32_t next_idx = next_sched_idx();
-
-//     /* Make sure deps have been fulfilled before releasing next trx in sched. */
-//     uint32_t needed_deps = trx_sys->sched_deps[next_idx];
-//     if (needed_deps != 0) {
-//       if ((int) needed_deps > trx_sys->sched_counts[next_idx]->load()) {
-//         return;
-//       }
-//     }
-
-//     /* Try to release next cluster. If a trx is not yet available, another arriving trx
-//     will allow us to make progress. */
-//     uint16_t cluster = trx_sys->cluster_sched[next_idx];
-//     lock_clust_t *next_lock = lock_clust_pop(cluster);
-
-//     while (next_lock == NULL && !found) {
-//       clust_lock_wait_request_check_for_cycles(); // TODO(accheng): is this needed?
-
-//       // TODO(accheng): assuming only one dep per trx
-//       uint32_t next_dep_idx = next_idx + 1;
-//       if (next_dep_idx == trx_sys->cluster_sched.size()) {
-//         next_dep_idx = 1;
-//       }
-//       while (cluster == trx_sys->cluster_sched[next_dep_idx]) { // trx_sys->sched_deps[next_dep_idx] == 0) {
-//         next_dep_idx++;
-//         if (next_dep_idx == trx_sys->cluster_sched.size()) {
-//           next_dep_idx = 1;
-//         }
-//       }
-
-//       // std::cout << " next_dep_idx: " << next_dep_idx << " cluster: " << trx_sys->cluster_sched[next_dep_idx] << std::endl;
-
-//       std::cout << "1-idx: " << next_idx << " cluster: " << cluster <<
-//       " next_dep_idx: " << next_dep_idx << " cluster: " << trx_sys->cluster_sched[next_dep_idx] <<
-//       " curr_dep: " << trx_sys->sched_counts[next_dep_idx]->load() << std::endl;
-
-//       // next_idx = next_sched_idx();
-//       while (trx_sys->cluster_sched[next_idx] == cluster) {
-//         trx_sys->sched_counts[next_dep_idx]->fetch_add(1);
-//         trx_sys->cluster_sched_idx = next_idx;
-//         next_idx = next_sched_idx();
-//       }
-
-//       std::cout << "2-idx: " << next_idx << " cluster: " << cluster <<
-//       " next_dep_idx: " << next_dep_idx << " cluster: " << trx_sys->cluster_sched[next_dep_idx] <<
-//       " curr_dep: " << trx_sys->sched_counts[next_dep_idx]->load() << std::endl;
-
-//       if ((int) trx_sys->sched_deps[next_dep_idx] <= trx_sys->sched_counts[next_dep_idx]->load()) {
-//         next_idx = next_dep_idx;
-//         cluster = trx_sys->cluster_sched[next_dep_idx];
-//         next_lock = lock_clust_pop(cluster);
-//         if (next_lock != NULL) {
-//           found = true;
-//         }
-
-
-//         std::cout << "3-idx: " << next_idx << " cluster: " << cluster << "next lock NULL "
-//         << (next_lock == NULL) << std::endl;
-
-//       } else {
-//         return;
-//       }
-//     }
-
-//     /* Clear out dep count for this cluster. */
-//     if (needed_deps != 0) {
-//       trx_sys->sched_counts[next_idx]->store(0);
-//     }
-
-//     // std::cout << "before grant" << std::endl;
-//     /* Release cluster lock. */
-//     lock_clust_grant(next_lock);
-
-//     trx_sys->cluster_sched_idx = next_idx;
-//   // std::cout << "after grant idx: " << trx_sys->cluster_sched_idx << std::endl;
-//   }
-// }
-
-/** Find the next available cluster and release the cluster lock of that
- transaction. */
 void release_next_clust() {
   ut_ad(trx_sys_mutex_own());
 
@@ -2344,7 +2250,7 @@ void release_next_clust() {
   uint16_t cluster = trx_sys->cluster_sched[curr_idx];
 
   std::cout << "trying to release idx: " << curr_idx << " cluster: " << cluster <<
-  " count: " << trx_sys->sched_counts[cluster]->load() << std::endl;
+  " lockcount: " << lock_sys->clust_locks_queued[cluster]->load() << std::endl;
 
   // if (trx_sys->sched_counts[cluster]->load() != 0) {
   //   return;
@@ -2432,6 +2338,8 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
     std::cout << "sched idx is zero" << std::endl;
     mutex_enter(&trx_sys->mutex);
     if (trx_sys->cluster_sched_idx != 0) {
+      std::cout<< "1-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+          << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
       if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
           trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
         trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
@@ -2492,6 +2400,8 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
 
     /* Add transaction to appropriate cluster lock. */
     mutex_enter(&trx_sys->mutex);
+    std::cout<< "2-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+          << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
     if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
         trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
       std::cout << "no queue" << std::endl;
@@ -6853,9 +6763,6 @@ bool lock_table_has_locks(const dict_table_t *table) {
 }
 /** Set the lock system timeout event. */
 void lock_set_timeout_event() { os_event_set(lock_sys->timeout_event); }
-
-/** Set the lock system cluster timeout event. */
-void clust_lock_set_timeout_event() { os_event_set(lock_sys->clust_timeout_event); }
 
 #ifdef UNIV_DEBUG
 

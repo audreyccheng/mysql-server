@@ -283,7 +283,7 @@ static srv_slot_t *lock_clust_wait_table_reserve_slot(
             lock_sys->clust_waiting_threads + srv_max_n_threads);
 
       /* TODO(accheng): add this if we add timeout for cluster locks */
-      clust_lock_wait_request_check_for_cycles();
+      // clust_lock_wait_request_check_for_cycles();
       return (slot);
     }
   }
@@ -298,8 +298,6 @@ static srv_slot_t *lock_clust_wait_table_reserve_slot(
 }
 
 void lock_wait_request_check_for_cycles() { lock_set_timeout_event(); }
-
-void clust_lock_wait_request_check_for_cycles() { clust_lock_set_timeout_event(); }
 
 void lock_wait_suspend_thread(que_thr_t *thr) {
   srv_slot_t *slot;
@@ -481,7 +479,8 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   lock_wait_mutex_enter();
 
   trx_mutex_enter(trx);
-  std::cout << "lock_clust_wait_suspend_thread" << std::endl;
+  // std::cout << "lock_clust_wait_suspend_thread" << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+  //         << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
 
   trx->error_state = DB_SUCCESS;
 
@@ -544,7 +543,7 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
 
   /* Release the slot for others to use */
 
-  std::cout << "lock_clust_wait_suspend_thread---done waiting" << std::endl;
+  // std::cout << "lock_clust_wait_suspend_thread---done waiting" << std::endl;
   lock_clust_wait_table_release_slot(slot);
 
   // TODO(accheng): add stats and thd wait time for cluster lock
@@ -573,11 +572,11 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   // }
 
   if (trx_is_interrupted(trx)) {
+    mutex_enter(&trx_sys->mutex);
     trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
     std::cout << "interrupted: " << trx->cluster_id <<
     " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
 
-    mutex_enter(&trx_sys->mutex);
     // trx_sys->waiting_clust_locks--;
     if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
       // std::cout << "deps done: " << trx->cluster_id << std::endl;
@@ -589,6 +588,7 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
 
     trx->error_state = DB_INTERRUPTED;
   }
+  // std::cout << "trx->error_state" << trx->error_state << std::endl;
 }
 
 /** Releases a user OS thread waiting for a lock to be released, if the
@@ -682,7 +682,7 @@ void queue_clust_trx(trx_t *trx, que_thr_t *thr) {
   lock_clust_push(trx->lock_clust);
 
   /* Update number of locks queued. */
-  std::cout << "queue_clust_trx cluster: " << trx->cluster_id << std::endl;
+  // std::cout << "queue_clust_trx cluster: " << trx->cluster_id << std::endl;
   lock_sys->clust_locks_queued[trx->cluster_id]->fetch_add(1);
 
   trx->error_state = DB_LOCK_CLUST_WAIT;
@@ -805,93 +805,6 @@ static void lock_wait_check_and_cancel(
   locksys::run_if_waiting({trx}, [&]() { lock_wait_try_cancel(trx, timeout); });
 }
 
-/** Release the cluster lock of given trx since it has timed out. */
-static void release_timeout_clust(trx_t *trx) {
-  mutex_enter(&trx_sys->mutex);
-
-  uint16_t cluster = trx->cluster_id;
-
-  std::cout << "should be releasing timeout cluster: " << cluster << std::endl;
-
-  lock_clust_t *next_lock = lock_clust_pop(cluster);
-  while (next_lock != NULL) {
-    std::cout << "timeout releasing cluster: " << cluster << std::endl;
-    trx_sys->sched_counts[cluster]->fetch_add(1);
-
-    /* Release cluster lock. */
-    lock_clust_grant(next_lock);
-
-    next_lock = lock_clust_pop(cluster);
-  }
-
-  // TODO(accheng): need to fix this!!
-  uint32_t curr_idx = trx_sys->cluster_sched_idx;
-  uint16_t curr_cluster = trx_sys->cluster_sched[curr_idx];
-  while (curr_cluster != cluster) {
-    trx_sys->cluster_sched_idx = next_sched_idx();
-  }
-  trx_sys->cluster_sched_idx = next_sched_idx();
-
-  // uint32_t next_idx = next_sched_idx();
-  // while (trx_sys->cluster_sched[next_idx] != cluster) {
-  //   uint32_t needed_deps = trx_sys->sched_deps[next_idx];
-  //   /* Clear out dep count for this cluster since we're skipping past it. */
-  //   if (needed_deps != 0) {
-  //     trx_sys->sched_counts[next_idx]->store(0);
-  //   }
-  //   trx_sys->cluster_sched_idx = next_idx;
-  //   next_idx = next_sched_idx();
-  // }
-
-  // uint32_t needed_deps = trx_sys->sched_deps[next_idx];
-  // if (needed_deps != 0) {
-  //   trx_sys->sched_counts[next_idx]->store(0);
-  // }
-
-  // /* TODO(accheng): currently we clear the deps of the next dep cluster because
-  // time out may cause us to skip some transactions that will increment the dep
-  // count. We assume that there is only one dep per transaction currently. */
-  // uint32_t next_dep_idx = next_sched_idx();
-  // while (trx_sys->sched_deps[next_dep_idx] == 0) {
-  //   next_dep_idx++;
-  //   if (next_dep_idx == trx_sys->cluster_sched.size()) {
-  //     next_dep_idx = 1;
-  //   }
-  // }
-  // trx_sys->sched_counts[next_dep_idx]->store(trx_sys->sched_deps[next_dep_idx]);
-
-  // /* There must be at least one trx queued for this cluster. However, it may not
-  // be the trx that timed out. */
-  // lock_clust_t *next_lock = lock_clust_pop(cluster);
-  // ut_ad(next_lock != NULL);
-
-  // lock_clust_grant(next_lock);
-
-  mutex_exit(&trx_sys->mutex);
-}
-
-/** Check if the thread cluster lock wait has timed out. Release it cluster
- lock if the wait has actually timed out. */
-static bool clust_lock_wait_check_and_cancel(
-    const srv_slot_t *slot) /*!< in: slot reserved by a user
-                            thread when the wait started */
-{
-  const auto wait_time = std::chrono::steady_clock::now() - slot->suspend_time;
-  /* Timeout exceeded or a wrap-around in system time counter */
-  const auto timeout = slot->wait_timeout < std::chrono::seconds{100000000} &&
-                       wait_time > slot->wait_timeout;
-  trx_t *trx = thr_get_trx(slot->thr);
-
-  if (!trx_is_interrupted(trx) && !timeout) {
-    return false;
-  }
-
-  std::cout << "checking slot with time: " << wait_time.count() << " timeout: "
-   << slot->wait_timeout.count() << std::endl;
-  release_timeout_clust(trx);
-  return true;
-}
-
 /** A snapshot of information about a single slot which was in use at the moment
 of taking the snapshot */
 struct waiting_trx_info_t {
@@ -926,32 +839,6 @@ static void lock_wait_check_slots_for_timeouts() {
     if (slot->in_use) {
       lock_wait_check_and_cancel(slot);
     }
-  }
-
-  lock_wait_mutex_exit();
-}
-
-/** Check all slots for user threads that are waiting on cluster locks, and if
-they have exceeded the time limit. */
-static void clust_lock_wait_check_slots_for_timeouts() {
-  ut_ad(!lock_wait_mutex_own());
-  lock_wait_mutex_enter();
-
-  bool freed = false;
-  for (auto slot = lock_sys->clust_waiting_threads; slot < lock_sys->clust_last_slot;
-       ++slot) {
-    /* We are doing a read without latching the lock_sys or the trx mutex.
-    This is OK, because a slot can't be freed or reserved without the lock wait
-    mutex. */
-    if (slot->in_use) {
-      freed = clust_lock_wait_check_and_cancel(slot);
-    }
-
-    /* Only free one cluster lock at a time since we have to update
-    cluster_sched_idx. */
-    // if (freed) {
-    //   break;
-    // }
   }
 
   lock_wait_mutex_exit();
@@ -1858,33 +1745,4 @@ void lock_wait_timeout_thread() {
     sig_count = os_event_reset(event);
 
   } while (srv_shutdown_state.load() < SRV_SHUTDOWN_CLEANUP);
-}
-
-/** A thread which wakes up threads whose cluster lock wait may have lasted too
-and releases them. */
-void clust_lock_wait_timeout_thread() {
-  // std::cout << "start clust_lock_wait_timeout_thread" << std::endl;
-  int64_t sig_count = 0;
-  os_event_t event = lock_sys->clust_timeout_event;
-
-  ut_ad(!srv_read_only_mode)
-
-  /** The last time we've checked for timeouts. */
-  // auto last_checked_for_timeouts_at = std::chrono::steady_clock::now();
-  // do {
-  //   // std::cout << "clust_lock_wait_timeout check" << std::endl;
-  //   auto current_time = std::chrono::steady_clock::now();
-  //   // TODO(accheng): this should be a parameter?
-  //   if (std::chrono::milliseconds(200) <=
-  //       current_time - last_checked_for_timeouts_at) {
-  //     last_checked_for_timeouts_at = current_time;
-  //     clust_lock_wait_check_slots_for_timeouts();
-  //   }
-
-  //   /* When someone is waiting for a cluster lock, we wake up every [time]
-  //   and check if a timeout has passed for a cluster lock wait. */
-  //   os_event_wait_time_low(event, std::chrono::milliseconds{200}, sig_count);
-  //   sig_count = os_event_reset(event);
-
-  // } while (srv_shutdown_state.load() < SRV_SHUTDOWN_CLEANUP);
 }
