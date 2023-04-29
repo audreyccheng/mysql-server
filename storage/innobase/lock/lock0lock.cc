@@ -2342,6 +2342,7 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
           << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
       if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
           trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+        std::cout << "firstno queue" << std::endl;
         trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
         trx_sys->cluster_sched_idx = trx->cluster_id + 1;
         if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size())
