@@ -702,7 +702,7 @@ dberr_t schedule_trx(trx_t *trx) {
     }
 
     /* Try scheduling again after we've queued. */
-    trx_sched_start_low(true /* queued before */, trx, thr);
+    // trx_sched_start_low(true /* queued before */, trx, thr);
   } else {
     /* We should only hit this point if we're the first trx to be scheduled. */
     DEBUG_SYNC(trx->mysql_thd, "first_trx_scheduled_for_mysql_error");

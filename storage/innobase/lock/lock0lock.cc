@@ -30,8 +30,8 @@ this program; if not, write to the Free Software Foundation, Inc.,
  Created 5/7/1996 Heikki Tuuri
  *******************************************************/
 
+#include "hash0hash.h"
 #define LOCK_MODULE_IMPLEMENTATION
-
 #include <mysql/service_thd_engine_lock.h>
 #include <sys/types.h>
 
@@ -2223,9 +2223,19 @@ void lock_clust_grant(lock_clust_t *lock) {
 }
 
 uint32_t next_sched_idx() {
+  ut_ad(trx_sys_mutex_own());
   uint32_t idx = trx_sys->cluster_sched_idx + 1;
   if (idx == trx_sys->cluster_sched.size()) {
     idx = 1;
+  }
+  return idx;
+}
+
+uint32_t prev_sched_idx(trx_t &trx) {
+  ut_ad(trx_sys_mutex_own());
+  uint32_t idx = trx.cluster_id - 1;
+  if (idx == 0) {
+    idx = trx_sys->cluster_sched.size() - 1;
   }
   return idx;
 }
@@ -2340,7 +2350,9 @@ void release_next_clust() {
   //   return;
   // }
 
-  lock_clust_t *next_lock = lock_clust_pop(cluster);
+  rw_lock_t *hash_lock = hash_get_lock(lock_sys->cluster_hash, cluster);
+  lock_clust_hash(hash_lock, cluster);
+  lock_clust_t *next_lock = lock_clust_pop_nl(cluster);
   while (next_lock != NULL) {
     // std::cout << "releasing cluster: " << cluster << std::endl;
     trx_sys->sched_counts[cluster]->fetch_add(1);
@@ -2348,27 +2360,32 @@ void release_next_clust() {
     /* Release cluster lock. */
     lock_clust_grant(next_lock);
 
-    next_lock = lock_clust_pop(cluster);
+    next_lock = lock_clust_pop_nl(cluster);
   }
 
   trx_sys->cluster_sched_idx = next_sched_idx();
 
   curr_idx = trx_sys->cluster_sched_idx;
   cluster = trx_sys->cluster_sched[curr_idx];
-  bool no_locks = false;
   std::cout << "increment idx to: " << curr_idx <<  " locks queued: " << lock_sys->clust_locks_queued[cluster]->load() << std::endl;
-  while (lock_sys->clust_locks_queued[cluster]->load() == 0) {
-    std::cout << "increment idx to: " << next_sched_idx() << std::endl;
-    trx_sys->cluster_sched_idx = next_sched_idx();
-    cluster = trx_sys->cluster_sched[trx_sys->cluster_sched_idx];
-    no_locks = true;
-  }
-  if (no_locks) {
-    next_lock = lock_clust_pop(cluster);
-    ut_ad(next_lock != NULL);
-    trx_sys->sched_counts[cluster]->fetch_add(1);
-    lock_clust_grant(next_lock);
-  }
+  // int clusters_tried = 0;
+  // while (lock_sys->clust_locks_queued[cluster]->load() == 0) {
+  //   std::cout << "increment idx to: " << next_sched_idx() << std::endl;
+  //   if (clusters_tried == trx_sys->num_clusters) {
+  //     trx_sys->cluster_sched_idx = 0;
+  //     break;
+  //   }
+  //   trx_sys->cluster_sched_idx = next_sched_idx();
+  //   cluster = trx_sys->cluster_sched[trx_sys->cluster_sched_idx];
+  //   clusters_tried++;
+  // }
+  unlock_clust_hash(hash_lock, cluster);
+  // if (trx_sys->cluster_sched_idx != 0) {
+  //   next_lock = lock_clust_pop(cluster);
+  //   ut_ad(next_lock != NULL);
+  //   trx_sys->sched_counts[cluster]->fetch_add(1);
+  //   lock_clust_grant(next_lock);
+  // }
 
   // std::cout << "new cluster queued: " << lock_sys->clust_locks_queued[cluster]->load() << std::endl;
 
@@ -2411,9 +2428,19 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
 
   // std::cout << "waiting locks: " << trx_sys->waiting_clust_locks << std::endl;
 
-  if (trx_sys->cluster_sched_idx == 0 && trx_sys->cluster_sched[1] == trx->cluster_id) {
+  if (trx_sys->cluster_sched_idx == 0 && !queued) {
+    std::cout << "sched idx is zero" << std::endl;
     mutex_enter(&trx_sys->mutex);
     if (trx_sys->cluster_sched_idx != 0) {
+      if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
+          trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+        trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
+        trx_sys->cluster_sched_idx = trx->cluster_id + 1;
+        if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size())
+          trx_sys->cluster_sched_idx = 1;
+        mutex_exit(&trx_sys->mutex);
+        return (DB_SUCCESS);
+      }
       queue_clust_trx(trx, thr);
       mutex_exit(&trx_sys->mutex);
       return (DB_LOCK_CLUST_WAIT);
@@ -2422,7 +2449,8 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
     std::cout << "first trx" << std::endl;
 
 
-    trx_sys->cluster_sched_idx++;
+    while (trx_sys->cluster_sched[trx_sys->cluster_sched_idx] != trx->cluster_id)
+      trx_sys->cluster_sched_idx = next_sched_idx();
 
     // ut_ad(trx_sys->sched_counts[trx_sys->cluster_sched_idx]->load() == 0);
 
@@ -2463,7 +2491,19 @@ dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr) {
     // trx = thr_get_trx(thr);
 
     /* Add transaction to appropriate cluster lock. */
+    mutex_enter(&trx_sys->mutex);
+    if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
+        trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+      std::cout << "no queue" << std::endl;
+      trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
+      trx_sys->cluster_sched_idx = trx->cluster_id + 1;
+      if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size())
+        trx_sys->cluster_sched_idx = 1;
+      mutex_exit(&trx_sys->mutex);
+      return (DB_SUCCESS);
+    }
     queue_clust_trx(trx, thr);
+    mutex_exit(&trx_sys->mutex);
 
     // mutex_exit(&trx_sys->mutex);
 

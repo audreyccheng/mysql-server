@@ -672,6 +672,9 @@ void lock_clust_grant(lock_clust_t *lock);
 /** Get the next idx for the schedule based on clust_sched_idx. */
 uint32_t next_sched_idx();
 
+/** Get the prev idx for the schedule based on clust_sched_idx. */
+uint32_t prev_sched_idx(trx_t &trx);
+
 /** Find the next available cluster and release the cluster lock of that
  transaction. */
 void release_next_clust();
