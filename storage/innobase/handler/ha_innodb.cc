@@ -5718,6 +5718,7 @@ static int start_trx(THD *thd, trx_t *trx, uint typ, const std::vector<int> &arg
   int err;
   dberr_t error;
 
+  std::cout << "start_trx" << err << std::endl;
   // TODO(accheng): add stats eventually?
   // ha_statistic_increment(&System_status_var::ha_update_count);
 
@@ -5745,11 +5746,11 @@ static int innobase_start_trx_for(
   const std::vector<int> &args)
 {
   // TODO(jchan): Implement.
-  // std::cout << "txn type: " << typ << ", args: ";
-  // for (auto &arg : args) {
-  //   std::cout << arg << ",";
-  // }
-  // std::cout << std::endl;
+  std::cout << "txn type: " << typ << ", args: ";
+  for (auto &arg : args) {
+    std::cout << arg << ",";
+  }
+  std::cout << std::endl;
   // return 0;
 
   DBUG_TRACE;
