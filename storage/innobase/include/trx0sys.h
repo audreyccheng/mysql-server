@@ -572,7 +572,7 @@ struct trx_sys_t {
   /** Number of transaction types. */
   uint16_t num_trx_types;
 
-  /** Index for most recently executed clulster in cluster schedule
+  /** Index for the next cluster to be executed in cluster schedule
   (protected by trx_sys_mutex). */
   uint32_t cluster_sched_idx;
 
@@ -583,16 +583,8 @@ struct trx_sys_t {
   First value is a no-op cluster. */
   std::vector<uint32_t> cluster_sched;
 
-  /** Array of dep indicies for each cluster. Each row is a cluster
-  and the number of deps can vary per cluster. */
-  std::vector<std::vector<uint32_t>> cluster_deps_arr;
-
-  /** Each entry represents the count needed. Corresponds to
-  cluster_sched. Not protected by trx_sys_t mutex. */
-  std::vector<uint32_t> sched_deps;
-
-  /** Each entry represents current count. Corresponds
-  to cluster_sched. Not protected by trx_sys_t mutex. */
+  /** Each entry represents number of ongoing transactions of a
+  cluster (protected by trx_sys_mutex). */
   std::vector<ut::unique_ptr<std::atomic_int>> sched_counts;
 
   /** Array of cluster hot key vectors where each row is a cluster and each

@@ -663,7 +663,6 @@ dberr_t schedule_trx(trx_t *trx) {
   dberr_t err;
   que_thr_t *thr;
 
-  // std::cout << "schedule_trx" << std::endl;
   trx->op_info = "cluster scheduling";
 
   /* The transaction should be active at this point to be scheduled */
@@ -682,8 +681,7 @@ dberr_t schedule_trx(trx_t *trx) {
   thr->run_node = thr;
   thr->prev_node = thr;
 
-  // std::cout << "before trx_sched_start_low" << err << std::endl;
-  trx_sched_start_low(false /* queued before */, trx, thr);
+  trx_sched_start_low(trx, thr);
 
   err = trx->error_state;
 
@@ -703,11 +701,8 @@ dberr_t schedule_trx(trx_t *trx) {
       ut_ad(was_lock_wait);
     }
 
-    /* Try scheduling again after we've queued. */
-    // trx_sched_start_low(true /* queued before */, trx, thr);
     err = trx->error_state;
     ut_ad(err == DB_SUCCESS);
-    // std::cout << "schedule_trx error_state" << trx->error_state << " err-" << err << std::endl;
   } else {
     /* We should only hit this point if we're the first trx to be scheduled. */
     DEBUG_SYNC(trx->mysql_thd, "first_trx_scheduled_for_mysql_error");

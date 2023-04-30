@@ -158,16 +158,15 @@ dberr_t trx_rollback_to_savepoint(
 static dberr_t trx_rollback_for_mysql_low(
     trx_t *trx) /*!< in/out: transaction */
 {
+
+
+  /* If all ongoing trxs have completed or rolled back for a cluster,
+  release the next waiting cluster. */
+  mutex_enter(&trx_sys->mutex);
   trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
   std::cout << "rolling back cluster: " << trx->cluster_id <<
   " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
-
-  mutex_enter(&trx_sys->mutex);
-  // trx_sys->waiting_clust_locks--;
   if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
-    // std::cout << "deps done: " << trx->cluster_id << std::endl;
-
-    /* Release the next waiting cluster. */
     release_next_clust();
   }
   mutex_exit(&trx_sys->mutex);

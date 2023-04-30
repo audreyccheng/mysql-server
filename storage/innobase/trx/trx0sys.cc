@@ -584,44 +584,6 @@ static void set_cluster_sched() {
   ut_ad(trx_sys->cluster_sched.size() == trx_sys->num_clusters + 1);
 }
 
-static void set_sched_deps_and_counts() {
-  std::vector<int> arr {0, /* No-op */
-    // 0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    0,//4,0,0,0,//0,0,0,0,0,0,
-    0//4,0,0,0,//0,0,0,0,0,0,
-    // 250,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 250,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    // 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-  };
-
-  for (uint32_t i = 0; i < trx_sys->sched_deps.size(); i++) {
-    trx_sys->sched_deps[i] = arr[i];
-  }
-
-  for (auto& p : trx_sys->sched_counts) {
-      p = ut::make_unique<std::atomic<int>>(0);
-  }
-
-  // TODO(accheng): cluster_deps_arr is currently hardcoded
-  trx_sys->cluster_deps_arr.resize(
-    trx_sys->num_clusters + 1,
-    std::vector<uint32_t>(1));
-  for (uint32_t i = 0; i < trx_sys->cluster_deps_arr.size(); i++) {
-    if (i < trx_sys->cluster_deps_arr.size() / 2) {
-      trx_sys->cluster_deps_arr[i][0] = 5; //11; // 251; // 4; //
-    } else {
-      trx_sys->cluster_deps_arr[i][0] = 1; // 251; //
-    }
-  }
-}
-
 /** Set cluster hot key array.
     TODO(accheng): currently hardcoded. */
 static void set_trx_cluster_hotkey_arr() {
@@ -700,15 +662,11 @@ void trx_sys_create(void) {
   new (&trx_sys->cluster_sched)(decltype(trx_sys->cluster_sched))();
   set_cluster_sched();
 
-  new (&trx_sys->sched_deps)(decltype(trx_sys->sched_deps))();
-  trx_sys->sched_deps.resize(trx_sys->cluster_sched.size());
-
   new (&trx_sys->sched_counts)(decltype(trx_sys->sched_counts))();
   trx_sys->sched_counts.resize(trx_sys->cluster_sched.size());
-
-  new (&trx_sys->cluster_deps_arr)(decltype(trx_sys->cluster_deps_arr))();
-
-  set_sched_deps_and_counts();
+  for (auto& p : trx_sys->sched_counts) {
+      p = ut::make_unique<std::atomic<int>>(0);
+  }
 
   new (&trx_sys->trx_cluster_hotkey_arr)(decltype(trx_sys->trx_cluster_hotkey_arr))();
   trx_sys->trx_cluster_hotkey_arr.resize(
@@ -795,10 +753,6 @@ void trx_sys_close(void) {
   trx_sys->rw_trx_ids.~trx_ids_t();
 
   trx_sys->cluster_sched.~vector<uint32_t>();
-
-  trx_sys->sched_deps.~vector<uint32_t>();
-
-  trx_sys->cluster_deps_arr.~vector<std::vector<uint32_t>>();
 
   for (uint32_t i = 0; i < trx_sys->sched_counts.size(); ++i) {
       ut::delete_(&trx_sys->sched_counts[i]);

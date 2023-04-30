@@ -680,22 +680,16 @@ uint32_t prev_sched_idx(trx_t &trx);
 void release_next_clust();
 
 /** Starts the scheduling process for transaction.
- @param[in,out] queued     whether transaction has already queued on cluster lock.
- @param[in,out]  trx             transaction
- @param[in,out]  thr             query thread of transaction
- @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
-dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr);
+@param[in,out]  trx             transaction
+@param[in,out]  thr             query thread of transaction
+@return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
+dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr);
 
 /** Computes trx's cluster given its type and arguments.
 @param[in]      typ             Type of transaction
 @param[in]      args            Transaction arguments
 @return cluster that trx belongs to */
 uint16_t trx_get_cluster_no(uint type, std::vector<int> args);
-
-/** Computes trx's cluster given its type and arguments.
-@param[in]      cluster_id      Cluster id of transaction
-@param[in]      deps            Deps vector of transaction */
-void trx_get_deps(uint16_t cluster_id, std::vector<uint32_t> &deps);
 
 /** Iterate over the granted locks which conflict with trx->lock.wait_lock and
 prepare the hit list for ASYNC Rollback.
@@ -1095,10 +1089,6 @@ struct lock_sys_t {
 
   /* Hash table with rw locks for cluster locks. */
   hash_table_t *cluster_hash;
-
-  /** Each entry represents the number of cluster locks queued,
-  indexed by cluster. */
-  std::vector<ut::unique_ptr<std::atomic_int>> clust_locks_queued;
 
   /** Padding to avoid false sharing of wait_mutex field */
   char pad2[ut::INNODB_CACHE_LINE_SIZE];

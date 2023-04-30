@@ -479,8 +479,6 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   lock_wait_mutex_enter();
 
   trx_mutex_enter(trx);
-  // std::cout << "lock_clust_wait_suspend_thread" << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
-  //         << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
 
   trx->error_state = DB_SUCCESS;
 
@@ -542,8 +540,6 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   }
 
   /* Release the slot for others to use */
-
-  // std::cout << "lock_clust_wait_suspend_thread---done waiting" << std::endl;
   lock_clust_wait_table_release_slot(slot);
 
   // TODO(accheng): add stats and thd wait time for cluster lock
@@ -572,23 +568,18 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   // }
 
   if (trx_is_interrupted(trx)) {
+    /* Update cluster dep count and release next cluster if needed. */
     mutex_enter(&trx_sys->mutex);
     trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
     std::cout << "interrupted: " << trx->cluster_id <<
     " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
-
-    // trx_sys->waiting_clust_locks--;
     if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
-      // std::cout << "deps done: " << trx->cluster_id << std::endl;
-
-      /* Release the next waiting cluster. */
       release_next_clust();
     }
     mutex_exit(&trx_sys->mutex);
 
     trx->error_state = DB_INTERRUPTED;
   }
-  // std::cout << "trx->error_state" << trx->error_state << std::endl;
 }
 
 /** Releases a user OS thread waiting for a lock to be released, if the
@@ -680,10 +671,6 @@ void queue_clust_trx(trx_t *trx, que_thr_t *thr) {
     std::chrono::system_clock::from_time_t(time(nullptr));
 
   lock_clust_push(trx->lock_clust);
-
-  /* Update number of locks queued. */
-  // std::cout << "queue_clust_trx cluster: " << trx->cluster_id << std::endl;
-  lock_sys->clust_locks_queued[trx->cluster_id]->fetch_add(1);
 
   trx->error_state = DB_LOCK_CLUST_WAIT;
 

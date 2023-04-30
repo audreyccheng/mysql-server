@@ -796,7 +796,6 @@ sel_node_t *pars_select_list(
 {
   sel_node_t *node;
 
-  std::cout << "pars_select_list" << std::endl;
   node = sel_node_create(pars_sym_tab_global->heap);
 
   node->select_list = select_list;

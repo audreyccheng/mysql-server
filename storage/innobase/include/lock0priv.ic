@@ -238,11 +238,11 @@ static inline ulint lock_get_wait(const lock_t *lock) /*!< in: lock */
   return (lock->type_mode & LOCK_WAIT);
 }
 
-static inline void lock_clust_hash(rw_lock_t *hash_lock, int cluster_id) {
+static inline void lock_clust_hash(rw_lock_t *hash_lock) {
   rw_lock_x_lock(hash_lock, UT_LOCATION_HERE);
 }
 
-static inline void unlock_clust_hash(rw_lock_t *hash_lock, int cluster_id) {
+static inline void unlock_clust_hash(rw_lock_t *hash_lock) {
   rw_lock_x_unlock(hash_lock);
 }
 

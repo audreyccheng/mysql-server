@@ -5718,7 +5718,6 @@ static int start_trx(THD *thd, trx_t *trx, uint typ, const std::vector<int> &arg
   int err;
   dberr_t error;
 
-  // std::cout << "start_trx" << std::endl;
   // TODO(accheng): add stats eventually?
   // ha_statistic_increment(&System_status_var::ha_update_count);
 
@@ -5734,7 +5733,7 @@ func_exit:
   err =
       convert_error_code_to_mysql(error, 0, thd);
 
-  std::cout << "start_trx-" << err << std::endl;
+  // std::cout << "start_trx-" << err << std::endl;
   return err;
 }
 
@@ -5746,11 +5745,11 @@ static int innobase_start_trx_for(
   const std::vector<int> &args)
 {
   // TODO(jchan): Implement.
-  std::cout << "txn type: " << typ << ", args: ";
-  for (auto &arg : args) {
-    std::cout << arg << ",";
-  }
-  std::cout << std::endl;
+  // std::cout << "txn type: " << typ << ", args: ";
+  // for (auto &arg : args) {
+  //   std::cout << arg << ",";
+  // }
+  // std::cout << std::endl;
   // return 0;
 
   DBUG_TRACE;
@@ -5774,13 +5773,7 @@ static int innobase_start_trx_for(
   /* Assign a cluster id for this transaction. */
   // TODO(jchan): Commented because the trx type array is hardcoded, so args
   // may cause out-of-bounds access.
-  //
   trx->cluster_id = trx_get_cluster_no(typ, args);
-  // trx->cluster_id = 0;
-  // std::cout << "cluster: " << trx->cluster_id << std::endl;
-
-  /* Set indicies that this trx will need to increment deps for. */
-  trx_get_deps(trx->cluster_id, trx->dep_indicies);
 
   /* Assign a read view if the transaction does not have it yet.
   Do this only if transaction is using REPEATABLE READ isolation

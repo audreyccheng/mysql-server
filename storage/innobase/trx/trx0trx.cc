@@ -277,10 +277,6 @@ struct TrxFactory {
     lock_trx_alloc_locks(trx);
 
     lock_clust_trx_alloc(trx);
-
-    // TODO(accheng): number of deps for a transaction is hardcoded.
-    new (&trx->dep_indicies)(decltype(trx->dep_indicies))();
-    trx->dep_indicies.resize(1);
   }
 
   /** Release resources held by the transaction object.
@@ -332,8 +328,6 @@ struct TrxFactory {
     trx->lock.rec_pool.~lock_pool_t();
 
     trx->lock.table_pool.~lock_pool_t();
-
-    trx->dep_indicies.~vector<uint32_t>();
 
     ut_a(trx->clust_wait_thr == nullptr);
 
@@ -2225,27 +2219,13 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
   DBUG_EXECUTE_IF("ib_trx_commit_crash_before_trx_commit_start",
                   DBUG_SUICIDE(););
 
-  // std::cout << "committing" << std::endl;
-  /* Update child deps of this trx. */
-  // for (uint32_t idx : trx->dep_indicies) {
-  //   if (idx != 0) {
-  //     trx_sys->sched_counts[idx]->fetch_add(1);
-  //     // std::cout << " idx: " << idx << " now " << trx_sys->sched_counts[idx]->load() << std::endl;
-  //   }
-  //   //
-  // }
-
-
+  /* If all ongoing trxs have completed for a cluster, release the
+  next waiting cluster. */
   mutex_enter(&trx_sys->mutex);
   trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
-  std::cout << "committing cluster: " << trx->cluster_id <<
-  " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
-
-  // trx_sys->waiting_clust_locks--;
+  // std::cout << "committing cluster: " << trx->cluster_id <<
+  // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
   if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
-    // std::cout << "deps done: " << trx->cluster_id << std::endl;
-
-    /* Release the next waiting cluster. */
     release_next_clust();
   }
   mutex_exit(&trx_sys->mutex);
