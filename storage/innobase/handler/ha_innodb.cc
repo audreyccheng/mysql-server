@@ -5718,7 +5718,7 @@ static int start_trx(THD *thd, trx_t *trx, uint typ, const std::vector<int> &arg
   int err;
   dberr_t error;
 
-  std::cout << "start_trx" << err << std::endl;
+  std::cout << "start_trx" << std::endl;
   // TODO(accheng): add stats eventually?
   // ha_statistic_increment(&System_status_var::ha_update_count);
 

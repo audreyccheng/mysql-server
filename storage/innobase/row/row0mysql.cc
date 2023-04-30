@@ -663,7 +663,7 @@ dberr_t schedule_trx(trx_t *trx) {
   dberr_t err;
   que_thr_t *thr;
 
-  std::cout << "schedule_trx" << err << std::endl;
+  std::cout << "schedule_trx" << std::endl;
   trx->op_info = "cluster scheduling";
 
   /* The transaction should be active at this point to be scheduled */
