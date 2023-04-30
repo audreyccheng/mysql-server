@@ -611,7 +611,7 @@ static void set_sched_deps_and_counts() {
 
   // TODO(accheng): cluster_deps_arr is currently hardcoded
   trx_sys->cluster_deps_arr.resize(
-    trx_sys->num_clusters,
+    trx_sys->num_clusters + 1,
     std::vector<uint32_t>(1));
   for (uint32_t i = 0; i < trx_sys->cluster_deps_arr.size(); i++) {
     if (i < trx_sys->cluster_deps_arr.size() / 2) {

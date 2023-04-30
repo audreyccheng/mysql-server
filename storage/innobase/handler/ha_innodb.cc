@@ -5718,7 +5718,7 @@ static int start_trx(THD *thd, trx_t *trx, uint typ, const std::vector<int> &arg
   int err;
   dberr_t error;
 
-  std::cout << "start_trx" << std::endl;
+  // std::cout << "start_trx" << std::endl;
   // TODO(accheng): add stats eventually?
   // ha_statistic_increment(&System_status_var::ha_update_count);
 
@@ -5777,6 +5777,7 @@ static int innobase_start_trx_for(
   //
   trx->cluster_id = trx_get_cluster_no(typ, args);
   // trx->cluster_id = 0;
+  // std::cout << "cluster: " << trx->cluster_id << std::endl;
 
   /* Set indicies that this trx will need to increment deps for. */
   trx_get_deps(trx->cluster_id, trx->dep_indicies);
