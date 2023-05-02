@@ -2530,6 +2530,7 @@ error:
 @param[in,out]  prebuilt        prebuilt struct in MySQL handle
 @return error code or DB_SUCCESS */
 dberr_t row_update_for_mysql(const byte *mysql_rec, row_prebuilt_t *prebuilt) {
+  // std::cout << "row_update_for_mysql cluster " << prebuilt->trx->cluster_id << std::endl;
   if (prebuilt->table->is_intrinsic()) {
     return (row_del_upd_for_mysql_using_cursor(prebuilt));
   } else {

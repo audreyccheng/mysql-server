@@ -2221,14 +2221,16 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
 
   /* If all ongoing trxs have completed for a cluster, release the
   next waiting cluster. */
-  mutex_enter(&trx_sys->mutex);
-  trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
-  // std::cout << "committing cluster: " << trx->cluster_id <<
-  // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
-  if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
-    release_next_clust();
+  if (trx->cluster_id != 0) {
+    mutex_enter(&trx_sys->mutex);
+    trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
+    // std::cout << "committing cluster: " << trx->cluster_id <<
+    // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+    if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+      release_next_clust();
+    }
+    mutex_exit(&trx_sys->mutex);
   }
-  mutex_exit(&trx_sys->mutex);
 
   if (trx_is_rseg_updated(trx)) {
     mtr = &local_mtr;
@@ -3447,6 +3449,7 @@ void trx_set_rw_mode(trx_t *trx) /*!< in/out: transaction that is RW */
 }
 
 void trx_kill_blocking(trx_t *trx) {
+  // std::cout << "trx_kill_blocking" << std::endl;
   if (!trx_is_high_priority(trx)) {
     return;
   }

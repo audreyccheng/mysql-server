@@ -559,10 +559,11 @@ purge_pq_t *trx_sys_init_at_db_start(void) {
     TODO(accheng): cluster schedule is currently hardcoded. */
 static void set_cluster_sched() {
   std::vector<int> arr {0, /* No-op */
+    1,2,
   // 0,0,0,2,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,
-    1,//0,0,0,
-    2//,1,1,1,
-    // 0,1,0,1, //0,1,0,1,0,1,
+    // 1,//0,0,0,
+    // 2//,1,1,1,
+    // 3,// 0,1,0,1, //0,1,0,1,0,1,
     // 2,3,2,3, //2,3,2,3,2,3
     // 0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,
     // 0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,
@@ -588,13 +589,18 @@ static void set_cluster_sched() {
     TODO(accheng): currently hardcoded. */
 static void set_trx_cluster_hotkey_arr() {
   std::vector<std::vector<int>> hardcoded_arr {
-    { 12, 0, 12, 0, 0, 1, 0, 1},
-    { 0, 1, 0, 1, 12, 0, 12, 0}
+    { 12, 0, 12, 0, 0, 1, 0, 1}, //, 0, 0},
+    { 0, 1, 0, 1, 12, 0, 12, 0}, //, 0, 0},
+    // { 0, 0, 0, 0, 0, 0, 0, 0, 12, 12}
     // { 12, 0, 0, 0, 0, 1, 0, 1},
     // { 0, 0, 12, 0, 0, 1, 0, 1},
     // { 0, 1, 0, 1, 12, 0, 0, 0},
     // { 0, 1, 0, 1, 0, 0, 12, 0}
     };
+
+  trx_sys->trx_cluster_hotkey_arr.resize(
+    hardcoded_arr.size(),
+    std::vector<int>(hardcoded_arr[0].size() * 2));
 
   for (uint32_t i = 0; i < trx_sys->trx_cluster_hotkey_arr.size(); i++) {
     for (uint32_t j = 0; j < trx_sys->trx_cluster_hotkey_arr[0].size(); j++) {
@@ -609,6 +615,8 @@ static void set_trx_type_len_arr() {
   std::vector<std::vector<int>> hardcoded_arr {
     { 12, 1},
     { 1, 12},
+    // { 12, 12},
+    // { 12, 12}
     };
 
   for (uint32_t i = 0; i < trx_sys->trx_type_len_arr.size(); i++) {
@@ -646,10 +654,10 @@ void trx_sys_create(void) {
   }
 
   /* TODO(accheng): number of clusters is currently hardcoded. */
-  trx_sys->num_clusters = 2; //4;
+  trx_sys->num_clusters = 2; //4; //
 
   /* TODO(accheng): number of hot keys is currently hardcoded. */
-  trx_sys->num_hot_keys = 4;
+  trx_sys->num_hot_keys = 4; // 4;
 
   /* TODO(accheng): number of trx types is currently hardcoded. */
   trx_sys->num_trx_types = 2;
@@ -658,7 +666,7 @@ void trx_sys_create(void) {
 
   trx_sys->waiting_clust_locks = 0;
 
-  /* TODO(accheng): cluster length is currently hardcoded. */
+  /* TODO(accheng): cluster schedule length is currently hardcoded. */
   new (&trx_sys->cluster_sched)(decltype(trx_sys->cluster_sched))();
   set_cluster_sched();
 
@@ -669,9 +677,6 @@ void trx_sys_create(void) {
   }
 
   new (&trx_sys->trx_cluster_hotkey_arr)(decltype(trx_sys->trx_cluster_hotkey_arr))();
-  trx_sys->trx_cluster_hotkey_arr.resize(
-    trx_sys->num_clusters,
-    std::vector<int>(trx_sys->num_hot_keys * 2));
   set_trx_cluster_hotkey_arr();
 
   /* TODO(accheng): size of this arr is currently hardcoded. */

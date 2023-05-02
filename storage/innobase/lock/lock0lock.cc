@@ -2221,6 +2221,31 @@ uint32_t prev_sched_idx(trx_t &trx) {
   return idx;
 }
 
+/** Check if there are any ongoing transactions. */
+static bool check_ongoing_trx() {
+  ut_ad(trx_sys_mutex_own());
+
+  bool ongoing = false;
+  for (uint32_t i = 1; i < trx_sys->sched_counts.size(); ++i) {
+    if (trx_sys->sched_counts[i]->load() != 0) {
+      ongoing = true;
+      break;
+    }
+  }
+
+  return ongoing;
+}
+
+/** Update cluster_sched_idx past first instance of given cluster. */
+static void update_sched_idx(uint16_t cluster_id) {
+  ut_ad(trx_sys_mutex_own());
+
+  trx_sys->cluster_sched_idx = cluster_id + 1;
+  if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size()) {
+    trx_sys->cluster_sched_idx = 1;
+  }
+}
+
 /** Find the next available cluster and release the cluster lock of that
  transaction. */
 void release_next_clust() {
@@ -2233,6 +2258,7 @@ void release_next_clust() {
   lock_clust_hash(hash_lock);
   lock_clust_t *next_lock = lock_clust_pop_nl(cluster);
   while (next_lock != NULL) {
+    // std::cout << "releasing cluster: " << cluster << std::endl;
     trx_sys->sched_counts[cluster]->fetch_add(1);
 
     /* Release cluster lock. */
@@ -2250,21 +2276,23 @@ void release_next_clust() {
  @param[in,out]  thr             query thread of transaction
  @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
 dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
+  // std::cout << "trx cluster: " << trx->cluster_id << std::endl;
   if (trx_sys->cluster_sched_idx == 0) {
     mutex_enter(&trx_sys->mutex);
     if (trx_sys->cluster_sched_idx != 0) {
       /* A transaction doesn't need to wait for a cluster lock if there
       are no other transactions running. */
       // TODO(accheng): update when there are more than 2 clusters
-      if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
-          trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+      // if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
+      //     trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+      if (!check_ongoing_trx()) {
+        // std::cout<< "1-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+        //   << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
         trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
 
         /* Update cluster_sched_idx appropriately. */
-        trx_sys->cluster_sched_idx = trx->cluster_id + 1;
-        if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size()) {
-          trx_sys->cluster_sched_idx = 1;
-        }
+        update_sched_idx(trx->cluster_id);
+
         mutex_exit(&trx_sys->mutex);
         return (DB_SUCCESS);
       }
@@ -2289,15 +2317,16 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
     /* A transaction doesn't need to wait for a cluster lock if there
       are no other transactions running. */
       // TODO(accheng): update when there are more than 2 clusters
-    if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
-        trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+    // if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
+    //     trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+    if (!check_ongoing_trx()) {
+      // std::cout<< "2-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+      //     << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
       trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
 
       /* Update cluster_sched_idx appropriately. */
-      trx_sys->cluster_sched_idx = trx->cluster_id + 1;
-      if (trx_sys->cluster_sched_idx == trx_sys->cluster_sched.size()) {
-        trx_sys->cluster_sched_idx = 1;
-      }
+      update_sched_idx(trx->cluster_id);
+
       mutex_exit(&trx_sys->mutex);
       return (DB_SUCCESS);
     }
@@ -2315,37 +2344,58 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
 @return cluster that trx belongs to */
 uint16_t trx_get_cluster_no(uint type, std::vector<int> args) {
   /* Construct hot key array for this transaction based on type and args. */
-  std::vector<int> trx_hot_key_arr(trx_sys->num_hot_keys * 2);
-  for (size_t i = 0; i < args.size(); ++i) {
-    int val = trx_sys->trx_type_len_arr[type][i];
-
-    int index = args[i];
-    ut_ad(index < trx_sys->num_hot_keys * 2);
-    trx_hot_key_arr[index] = val;
+  // std::cout << "type " << type << std::endl;
+  if (type == 0) { //|| type == 1) { //
+    return 1;
+  } else {
+    return 2;
   }
 
-  /* Find cluster based on difference between elements in hot key array. */
-  size_t best_cluster_i = 0;
-  uint best_loss = UINT32_MAX;
-  for (
-    size_t cluster_i = 0;
-    cluster_i < trx_sys->trx_cluster_hotkey_arr.size();
-    ++cluster_i) {
-    uint curr_loss = 0;
-    for (
-      size_t hotkey_i = 0;
-      hotkey_i < trx_sys->trx_cluster_hotkey_arr[0].size();
-      ++hotkey_i) /* L1 loss */
-      curr_loss += abs(
-        trx_sys->trx_cluster_hotkey_arr[cluster_i][hotkey_i] - trx_hot_key_arr[hotkey_i]);
-    if (curr_loss < best_loss) {
-      best_cluster_i = cluster_i;
-      best_loss = curr_loss;
-    }
-  }
+  // } else if (type == 1) {
+  //   return 2;
+  // } else if (type == 2) {
+  //   return 3;
+  // } else {
+  //   return 4;
+  // }
+  // } else if (type == 1) {
+  //   return 2;
+  // } else {
+  //   return 3;
+  // }
 
-  /* Cluster 0 is never used. */
-  return (uint16_t) best_cluster_i + 1;
+  // std::vector<int> trx_hot_key_arr(trx_sys->num_hot_keys * 2);
+  // std::cout << "type " << type;
+  // for (size_t i = 0; i < args.size(); ++i) {
+  //   int val = trx_sys->trx_type_len_arr[type][i];
+
+  //   int index = args[i];
+  //   ut_ad(index < trx_sys->num_hot_keys * 2);
+  //   trx_hot_key_arr[index] = val;
+  //   std::cout << " index " << index << " val " << val;
+  // }
+
+  // /* Find cluster based on difference between elements in hot key array. */
+  // size_t best_cluster_i = 0;
+  // uint best_loss = UINT32_MAX;
+  // for (size_t cluster_i = 0; cluster_i < trx_sys->trx_cluster_hotkey_arr.size();
+  //   ++cluster_i) {
+  //   uint curr_loss = 0;
+  //   for (size_t hotkey_i = 0; hotkey_i < trx_sys->trx_cluster_hotkey_arr[0].size();
+  //     ++hotkey_i) { /* L1 loss */
+  //     curr_loss += abs(
+  //       trx_sys->trx_cluster_hotkey_arr[cluster_i][hotkey_i] - trx_hot_key_arr[hotkey_i]);
+  //   }
+  //   if (curr_loss < best_loss) {
+  //     best_cluster_i = cluster_i;
+  //     best_loss = curr_loss;
+  //   }
+  //   // std::cout << " cluster_i " << cluster_i << " curr_loss " << curr_loss;
+  // }
+  // std::cout << " cluster " << best_cluster_i + 1 << std::endl;
+
+  // /* Cluster 0 is never used. */
+  // return (uint16_t) best_cluster_i + 1;
 }
 
 void lock_make_trx_hit_list(trx_t *hp_trx, hit_list_t &hit_list) {

@@ -569,14 +569,16 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
 
   if (trx_is_interrupted(trx)) {
     /* Update cluster dep count and release next cluster if needed. */
-    mutex_enter(&trx_sys->mutex);
-    trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
-    std::cout << "interrupted: " << trx->cluster_id <<
-    " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
-    if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
-      release_next_clust();
+    if (trx->cluster_id != 0) {
+      mutex_enter(&trx_sys->mutex);
+      trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
+      std::cout << "interrupted: " << trx->cluster_id <<
+      " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+      if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+        release_next_clust();
+      }
+      mutex_exit(&trx_sys->mutex);
     }
-    mutex_exit(&trx_sys->mutex);
 
     trx->error_state = DB_INTERRUPTED;
   }
