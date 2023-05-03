@@ -97,6 +97,19 @@ static void trx_rollback_to_savepoint_low(
     assert_trx_nonlocking_or_in_list(trx);
   }
 
+  // /* If all ongoing trxs have completed or rolled back for a cluster,
+  // release the next waiting cluster. */
+  // if (trx->cluster_id != 0 && trx->error_state == DB_DEADLOCK) {
+  //   mutex_enter(&trx_sys->mutex);
+  //   trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
+  //   std::cout << "trx_rollback_to_savepoint_low cluster: " << trx->cluster_id <<
+  //   " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+  //   if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+  //     release_next_clust();
+  //   }
+  //   mutex_exit(&trx_sys->mutex);
+  // }
+
   trx->error_state = DB_SUCCESS;
 
   if (trx_is_rseg_updated(trx)) {
@@ -118,6 +131,7 @@ static void trx_rollback_to_savepoint_low(
   }
 
   if (savept == nullptr) {
+    std::cout << "trx_rollback_to_savepoint_low" << std::endl;
     trx_rollback_finish(trx);
     MONITOR_INC(MONITOR_TRX_ROLLBACK);
   } else {
@@ -144,6 +158,7 @@ dberr_t trx_rollback_to_savepoint(
                           partial rollback requested, or NULL for
                           complete rollback */
 {
+  std::cout << "trx_rollback_to_savepoint" << std::endl;
   ut_ad(!trx_mutex_own(trx));
 
   trx_start_if_not_started_xa(trx, true, UT_LOCATION_HERE);
@@ -179,7 +194,7 @@ static dberr_t trx_rollback_for_mysql_low(
   then the transaction object does not have an InnoDB session
   object, and we set a dummy session that we use for all MySQL
   transactions. */
-
+  std::cout << "trx_rollback_for_mysql_low" << std::endl;
   trx_rollback_to_savepoint_low(trx, nullptr);
 
   trx->op_info = "";
@@ -282,6 +297,7 @@ static dberr_t trx_rollback_low(trx_t *trx) {
  @return error code or DB_SUCCESS */
 dberr_t trx_rollback_for_mysql(trx_t *trx) /*!< in/out: transaction */
 {
+  std::cout << "trx_rollback_for_mysql" << std::endl;
   /* Avoid the tracking of async rollback killer
   thread to enter into InnoDB. */
   if (TrxInInnoDB::is_async_rollback(trx)) {
@@ -638,6 +654,7 @@ static void trx_rollback_active(trx_t *trx) /*!< in/out: transaction */
 
   que_run_threads(roll_node->undo_thr);
 
+  std::cout << "trx_rollback_active" << std::endl;
   trx_rollback_finish(thr_get_trx(roll_node->undo_thr));
 
   /* Free the memory reserved by the undo graph */
@@ -1056,6 +1073,7 @@ static que_thr_t *trx_rollback_start(trx_t *trx, ib_id_t roll_limit,
 /** Finishes a transaction rollback. */
 static void trx_rollback_finish(trx_t *trx) /*!< in: transaction */
 {
+  std::cout << "trx_rollback_finish" << std::endl;
   trx_commit(trx);
 
   trx->mod_tables.clear();

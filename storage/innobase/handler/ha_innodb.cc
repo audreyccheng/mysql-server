@@ -2879,6 +2879,7 @@ additionally freed from all association with MYSQL.
 @param[in,out]  ptr_trx_arg     pointer to a buffer to store old trx_t */
 static void innodb_replace_trx_in_thd(THD *thd, void *new_trx_arg,
                                       void **ptr_trx_arg) {
+  std::cout << "innodb_replace_trx_in_thd" << std::endl;
   DBUG_TRACE;
   trx_t *&trx = thd_to_trx(thd);
 
@@ -5702,6 +5703,7 @@ static bool innobase_flush_logs(handlerton *hton, bool binlog_group_flush) {
 /** Commits a transaction in an InnoDB database. */
 void innobase_commit_low(trx_t *trx) /*!< in: transaction handle */
 {
+  std::cout << "innobase_commit_low" << std::endl;
   if (trx_is_started(trx)) {
     const dberr_t error [[maybe_unused]] = trx_commit_for_mysql(trx);
     // This is ut_ad not ut_a, because previously we did not have an assert
@@ -5750,7 +5752,7 @@ static int innobase_start_trx_for(
   //   std::cout << arg << ",";
   // }
   // std::cout << std::endl;
-  return 0;
+  // return 0;
 
   DBUG_TRACE;
   assert(hton == innodb_hton_ptr);
@@ -5951,7 +5953,7 @@ static int innobase_commit(handlerton *hton, /*!< in: InnoDB handlerton */
     if (thd->se_persists_gtid_explicit()) {
       trx_start_if_not_started(trx, true, UT_LOCATION_HERE);
     }
-
+    std::cout << "innobase_commit" << std::endl;
     innobase_commit_low(trx);
 
     if (!read_only) {
@@ -6015,6 +6017,7 @@ static int innobase_rollback(handlerton *hton, /*!< in: InnoDB handlerton */
                                                 transaction false - rollback the
                                                 current statement only */
 {
+  std::cout << "innobase_rollback" << std::endl;
   DBUG_TRACE;
   assert(hton == innodb_hton_ptr);
   DBUG_PRINT("trans", ("aborting transaction"));
@@ -6077,6 +6080,7 @@ static int innobase_rollback(handlerton *hton, /*!< in: InnoDB handlerton */
  @return 0 or error number */
 static int innobase_rollback_trx(trx_t *trx) /*!< in: transaction */
 {
+  std::cout << "innobase_rollback_trx" << std::endl;
   dberr_t error = DB_SUCCESS;
 
   DBUG_TRACE;
@@ -6238,6 +6242,7 @@ static int innobase_close_connection(
     THD *thd)         /*!< in: handle to the MySQL thread of the user
                       whose resources should be free'd */
 {
+  std::cout << "innobase_close_connection" << std::endl;
   DBUG_TRACE;
   assert(hton == innodb_hton_ptr);
 
@@ -20206,6 +20211,7 @@ static xa_status_code innobase_rollback_by_xid(
     XID *xid)         /*!< in: X/Open XA transaction
                       identification */
 {
+  std::cout << "innobase_rollback_by_xid" << std::endl;
   assert(hton == innodb_hton_ptr);
 
   trx_t *trx = trx_get_trx_by_xid(xid);

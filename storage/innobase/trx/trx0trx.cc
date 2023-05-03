@@ -601,6 +601,7 @@ void trx_free_for_background(trx_t *trx) {
 }
 
 void trx_free_prepared_or_active_recovered(trx_t *trx) {
+  std::cout << "trx_free_prepared_or_active_recovered" << std::endl;
   ut_a(trx->magic_n == TRX_MAGIC_N);
 
   bool was_prepared{false};
@@ -1926,6 +1927,7 @@ static void trx_commit_in_memory(
 /*!< in: true if serialisation log was
 written */
 {
+  std::cout << "trx_commit_in_memory" << std::endl;
   ut_ad(trx_can_be_handled_by_current_thread_or_is_hp_victim(trx));
 
   trx->must_flush_log_later = false;
@@ -2120,6 +2122,7 @@ written */
 @param[in,out] mtr Mini-transaction (will be committed), or null if trx made no
 modifications */
 void trx_commit_low(trx_t *trx, mtr_t *mtr) {
+  std::cout << "trx_commit_low" << std::endl;
   assert_trx_nonlocking_or_in_list(trx);
   ut_ad(!trx_state_eq(trx, TRX_STATE_COMMITTED_IN_MEMORY));
   ut_ad(!mtr || mtr->is_active());
@@ -2213,6 +2216,7 @@ void trx_commit_low(trx_t *trx, mtr_t *mtr) {
 /** Commits a transaction. */
 void trx_commit(trx_t *trx) /*!< in/out: transaction */
 {
+  std::cout << "trx_commit" << std::endl;
   mtr_t *mtr;
   mtr_t local_mtr;
 
@@ -2224,8 +2228,8 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
   if (trx->cluster_id != 0) {
     mutex_enter(&trx_sys->mutex);
     trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
-    // std::cout << "committing cluster: " << trx->cluster_id <<
-    // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+    std::cout << "committing cluster: " << trx->cluster_id <<
+    " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
     if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
       release_next_clust();
     }
@@ -2389,7 +2393,7 @@ que_thr_t *trx_commit_step(que_thr_t *thr) /*!< in: query thread */
     trx_commit_or_rollback_prepare(trx);
 
     trx->lock.que_state = TRX_QUE_COMMITTING;
-
+    std::cout << "trx_commit_step" << std::endl;
     trx_commit(trx);
 
     ut_ad(trx->lock.wait_thr == nullptr);
@@ -2450,7 +2454,7 @@ dberr_t trx_commit_for_mysql(trx_t *trx) /*!< in/out: transaction */
       if (trx->id != 0) {
         trx_update_mod_tables_timestamp(trx);
       }
-
+      std::cout << "trx_commit_for_mysql" << std::endl;
       trx_commit(trx);
 
       MONITOR_DEC(MONITOR_TRX_ACTIVE);
@@ -3449,8 +3453,9 @@ void trx_set_rw_mode(trx_t *trx) /*!< in/out: transaction that is RW */
 }
 
 void trx_kill_blocking(trx_t *trx) {
-  // std::cout << "trx_kill_blocking" << std::endl;
+  // std::cout << "trx_kill_blocking cluster:" << trx->cluster_id << std::endl;
   if (!trx_is_high_priority(trx)) {
+    // std::cout << "trx_kill_blocking hi-pri" << std::endl;
     return;
   }
   hit_list_t hit_list;
@@ -3484,10 +3489,12 @@ void trx_kill_blocking(trx_t *trx) {
 
   ut_a(trx->dict_operation_lock_mode == 0);
 
+  std::cout << "trx_kill_blocking 1" << std::endl;
   /** Kill the transactions in the lock acquisition order old -> new. */
   hit_list_t::reverse_iterator end = hit_list.rend();
 
   for (hit_list_t::reverse_iterator it = hit_list.rbegin(); it != end; ++it) {
+    std::cout << "trx_kill_blocking 2" << std::endl;
     trx_t *victim_trx = it->m_trx;
     auto version = it->m_version;
 
@@ -3496,6 +3503,7 @@ void trx_kill_blocking(trx_t *trx) {
     ut_ad(victim_trx->mysql_thd != trx->mysql_thd);
 
     if (lock_cancel_if_waiting_and_release(*it)) {
+      std::cout << "lock_cancel_if_waiting_and_release--trx_blocking" << std::endl;
       continue;
     }
 
@@ -3513,6 +3521,7 @@ void trx_kill_blocking(trx_t *trx) {
 
     bool exited_innodb = false;
 
+    std::cout << "trx_kill_blocking 3" << std::endl;
     while ((victim_trx->in_innodb & TRX_FORCE_ROLLBACK_MASK) > 0 &&
            victim_trx->version == version) {
       trx_mutex_exit(victim_trx);
@@ -3570,6 +3579,18 @@ void trx_kill_blocking(trx_t *trx) {
     ut_a(!victim_trx->read_only);
     ut_a(victim_trx->mysql_thd != nullptr);
 
+    /* If all ongoing trxs have completed or rolled back for a cluster,
+    release the next waiting cluster. */
+    if (victim_trx->cluster_id != 0) {
+      mutex_enter(&trx_sys->mutex);
+      trx_sys->sched_counts[victim_trx->cluster_id]->fetch_sub(1);
+      std::cout << "killing cluster: " << victim_trx->cluster_id <<
+      " count: " << trx_sys->sched_counts[victim_trx->cluster_id]->load() << std::endl;
+      if (trx_sys->sched_counts[victim_trx->cluster_id]->load() == 0) {
+        release_next_clust();
+      }
+      mutex_exit(&trx_sys->mutex);
+    }
     trx_mutex_exit(victim_trx);
 
 #ifdef UNIV_DEBUG
@@ -3581,6 +3602,7 @@ void trx_kill_blocking(trx_t *trx) {
                                     sizeof(buffer), 512);
     id = victim_trx->id;
 #endif /* UNIV_DEBUG */
+    std::cout << "trx_kill_blocking 4" << std::endl;
     trx_rollback_for_mysql(victim_trx);
 
 #ifdef UNIV_DEBUG

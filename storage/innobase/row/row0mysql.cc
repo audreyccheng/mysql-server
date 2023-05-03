@@ -668,7 +668,7 @@ dberr_t schedule_trx(trx_t *trx) {
   /* The transaction should be active at this point to be scheduled */
   ut_ad(trx_is_started(trx));
 
-  savept = trx_savept_take(trx);
+  // savept = trx_savept_take(trx);
 
   /* Create a dummy sched_graph for getting a query thread to do the cluster locking. */
   if (trx->sched_graph == nullptr) {
@@ -773,6 +773,7 @@ handle_new_error:
       break;
     case DB_LOCK_WAIT:
 
+      std::cout << "DB_LOCK_WAIT trx_kill_blocking" << std::endl;
       trx_kill_blocking(trx);
       DEBUG_SYNC_C("before_lock_wait_suspend");
 
@@ -809,6 +810,7 @@ handle_new_error:
       /* Roll back the whole transaction; this resolution was added
       to version 3.23.43 */
 
+      std::cout << "DB_DEADLOCK" << std::endl;
       trx_rollback_to_savepoint(trx, nullptr);
       break;
 

@@ -1708,6 +1708,7 @@ do_possible_lock_wait:
     /* To avoid check_table being dropped, increment counter */
     check_table->n_foreign_key_checks_running.fetch_add(1);
 
+    std::cout << "row0ins trx_kill_blocking" << std::endl;
     trx_kill_blocking(trx);
 
     lock_wait_suspend_thread(thr);

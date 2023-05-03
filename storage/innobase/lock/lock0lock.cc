@@ -2161,6 +2161,7 @@ lock, but not the lock->trx->mutex.
 @param[in,out]    lock    waiting lock request
  */
 static void lock_grant(lock_t *lock) {
+  // std::cout << "lock_grant" << std::endl;
   ut_ad(locksys::owns_lock_shard(lock));
   ut_ad(!trx_mutex_own(lock->trx));
 
@@ -2258,7 +2259,7 @@ void release_next_clust() {
   lock_clust_hash(hash_lock);
   lock_clust_t *next_lock = lock_clust_pop_nl(cluster);
   while (next_lock != NULL) {
-    // std::cout << "releasing cluster: " << cluster << std::endl;
+    std::cout << "releasing cluster: " << cluster << std::endl;
     trx_sys->sched_counts[cluster]->fetch_add(1);
 
     /* Release cluster lock. */
@@ -2276,7 +2277,7 @@ void release_next_clust() {
  @param[in,out]  thr             query thread of transaction
  @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
 dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
-  // std::cout << "trx cluster: " << trx->cluster_id << std::endl;
+  std::cout << "trx cluster: " << trx->cluster_id << std::endl;
   if (trx_sys->cluster_sched_idx == 0) {
     mutex_enter(&trx_sys->mutex);
     if (trx_sys->cluster_sched_idx != 0) {
@@ -2286,8 +2287,8 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
       // if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
       //     trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
       if (!check_ongoing_trx()) {
-        // std::cout<< "1-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
-        //   << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+        std::cout<< "1-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+          << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
         trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
 
         /* Update cluster_sched_idx appropriately. */
@@ -2320,8 +2321,8 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
     // if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
     //     trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
     if (!check_ongoing_trx()) {
-      // std::cout<< "2-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
-      //     << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+      std::cout<< "2-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+          << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
       trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
 
       /* Update cluster_sched_idx appropriately. */
@@ -2464,6 +2465,7 @@ void lock_make_trx_hit_list(trx_t *hp_trx, hit_list_t &hit_list) {
 static void lock_rec_cancel(
     lock_t *lock) /*!< in: waiting record lock request */
 {
+  std::cout << "lock_rec_cancel" << std::endl;
   ut_ad(lock_get_type_low(lock) == LOCK_REC);
   ut_ad(locksys::owns_page_shard(lock->rec_lock.page_id));
 
@@ -2557,6 +2559,7 @@ trx->lock.schedule_weight.
 @param[in]    heap_no   Heap number within the page on which the
 lock was (or still is) held */
 static void lock_rec_grant_by_heap_no(lock_t *in_lock, ulint heap_no) {
+  std::cout << "lock_rec_grant_by_heap_no" << std::endl;
   const auto hash_table = in_lock->hash_table();
 
   ut_ad(in_lock->is_record_lock());
@@ -2688,6 +2691,7 @@ wait in queue, and either grants it, or makes sure that the reason it has to
 wait is reflected in the wait-for graph.
 @param[in]  lock  A lock in WAITING state, which perhaps can be granted now */
 static void lock_grant_or_update_wait_for_edge(lock_t *lock) {
+  std::cout << "lock_grant_or_update_wait_for_edge" << std::endl;
   ut_ad(lock->is_waiting());
   const lock_t *blocking_lock = lock_has_to_wait_in_queue(lock, nullptr);
   if (blocking_lock == nullptr) {
@@ -2721,6 +2725,7 @@ in_lock, and only locks waiting for those heap_no's will be checked.
 @param[in,out]  in_lock         record lock object: grant all non-conflicting
                           locks waiting behind this lock object */
 static void lock_rec_grant(lock_t *in_lock) {
+  std::cout << "lock_rec_grant" << std::endl;
   const auto page_id = in_lock->rec_lock.page_id;
   auto lock_hash = in_lock->hash_table();
 
@@ -2765,6 +2770,7 @@ to a lock. NOTE: all record locks contained in in_lock are removed.
                                 lock requests granted, if they are now
                                 qualified to it */
 static void lock_rec_dequeue_from_page(lock_t *in_lock) {
+  // std::cout << "lock_rec_dequeue_from_page" << std::endl;
   lock_rec_discard(in_lock);
   lock_rec_grant(in_lock);
 }
@@ -4335,6 +4341,7 @@ run_again:
 @param[in]      lock            Lock that was unlocked
 @param[in]      heap_no         Heap no within the page for the lock. */
 static void lock_rec_release(lock_t *lock, ulint heap_no) {
+  std::cout << "lock_rec_release" << std::endl;
   ut_ad(locksys::owns_page_shard(lock->rec_lock.page_id));
   ut_ad(!lock_get_wait(lock));
   ut_ad(lock_get_type_low(lock) == LOCK_REC);
@@ -4417,6 +4424,7 @@ void lock_rec_unlock(
 /** Unlock the GAP Lock part of a Next Key Lock and grant it to waiters (if any)
 @param[in,out]  lock    lock object */
 static void lock_release_gap_lock(lock_t *lock) {
+  std::cout << "lock_release_gap_lock" << std::endl;
   /* 1. Remove GAP lock for all records */
   lock->unlock_gap_lock();
 
@@ -4445,6 +4453,7 @@ released if rules permit it.
 @return true iff the function did release (maybe a part of) a lock
 */
 static bool lock_release_read_lock(lock_t *lock, bool only_gap) {
+  std::cout << "lock_release_read_lock" << std::endl;
   /* Keep in sync with lock_edge_may_survive_prepare() */
   if (!lock->is_record_lock() || lock->is_insert_intention() ||
       lock->is_predicate()) {
@@ -4634,6 +4643,7 @@ namespace locksys {
 @param[in,out]  trx   transaction
 @return true if and only if it succeeded to do the job*/
 [[nodiscard]] static bool try_release_all_locks(trx_t *trx) {
+  std::cout << "try_release_all_locks" << std::endl;
   lock_t *lock;
   ut_ad(!locksys::owns_exclusive_global_latch());
   ut_ad(!trx_mutex_own(trx));
@@ -6428,6 +6438,7 @@ page_id_t lock_rec_get_page_id(const lock_t *lock) {
 }
 
 void lock_cancel_waiting_and_release(trx_t *trx) {
+  std::cout << "lock_cancel_waiting_and_release" << std::endl;
   ut_ad(trx_mutex_own(trx));
   const auto lock = trx->lock.wait_lock.load();
   ut_ad(locksys::owns_lock_shard(lock));
@@ -6502,6 +6513,7 @@ void lock_unlock_table_autoinc(trx_t *trx) /*!< in/out: transaction */
  TRX_STATE_COMMITTED_IN_MEMORY. */
 void lock_trx_release_locks(trx_t *trx) /*!< in/out: transaction */
 {
+  std::cout << "lock_trx_release_locks" << std::endl;
   DEBUG_SYNC_C("before_lock_trx_release_locks");
 
   trx_mutex_enter(trx);
@@ -6554,6 +6566,7 @@ void lock_trx_release_locks(trx_t *trx) /*!< in/out: transaction */
 }
 
 bool lock_cancel_if_waiting_and_release(const TrxVersion trx_version) {
+  std::cout << "lock_cancel_if_waiting_and_release--trx_blocking" << std::endl;
   trx_t &trx{*trx_version.m_trx};
   bool realeased = false;
   locksys::run_if_waiting(trx_version, [&]() {
