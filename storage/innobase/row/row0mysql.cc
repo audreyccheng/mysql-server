@@ -773,7 +773,6 @@ handle_new_error:
       break;
     case DB_LOCK_WAIT:
 
-      std::cout << "DB_LOCK_WAIT trx_kill_blocking" << std::endl;
       trx_kill_blocking(trx);
       DEBUG_SYNC_C("before_lock_wait_suspend");
 
@@ -810,7 +809,6 @@ handle_new_error:
       /* Roll back the whole transaction; this resolution was added
       to version 3.23.43 */
 
-      std::cout << "DB_DEADLOCK" << std::endl;
       trx_rollback_to_savepoint(trx, nullptr);
       break;
 
@@ -2532,7 +2530,6 @@ error:
 @param[in,out]  prebuilt        prebuilt struct in MySQL handle
 @return error code or DB_SUCCESS */
 dberr_t row_update_for_mysql(const byte *mysql_rec, row_prebuilt_t *prebuilt) {
-  // std::cout << "row_update_for_mysql cluster " << prebuilt->trx->cluster_id << std::endl;
   if (prebuilt->table->is_intrinsic()) {
     return (row_del_upd_for_mysql_using_cursor(prebuilt));
   } else {

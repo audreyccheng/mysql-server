@@ -5937,7 +5937,6 @@ normal_return:
   /* Rollback blocking transactions from hit list for high priority
   transaction, if any. We should not be holding latches here as
   we are going to rollback the blocking transactions. */
-  // std::cout << "row0sel trx_kill_blocking" << std::endl;
   trx_kill_blocking(trx);
 
   DEBUG_SYNC_C("row_search_for_mysql_before_return");
@@ -5970,7 +5969,6 @@ normal_return:
     ut_ad(path->empty());
   }
 #endif
-  // std::cout << "after row0sel trx_kill_blocking" << std::endl;
 
 func_exit:
   trx->op_info = "";
@@ -6017,7 +6015,6 @@ func_exit:
 
   ut_a(!trx->has_search_latch);
 
-  // std::cout << "row0sel err-" << err << std::endl;
   return err;
 }
 

@@ -97,7 +97,6 @@ static void lock_clust_wait_table_print(void) {
 static void lock_wait_table_release_slot(
     srv_slot_t *slot) /*!< in: slot to release */
 {
-  std::cout << "lock_wait_table_release_slot" << std::endl;
 #ifdef UNIV_DEBUG
   srv_slot_t *upper = lock_sys->waiting_threads + srv_max_n_threads;
 #endif /* UNIV_DEBUG */
@@ -127,13 +126,6 @@ static void lock_wait_table_release_slot(
   for (slot = lock_sys->last_slot;
        slot > lock_sys->waiting_threads && !slot->in_use; --slot) {
     /* No op */
-  }
-
-  srv_slot_t *Xslot = lock_sys->last_slot;
-  for (uint32_t i = 0; i < srv_max_n_threads && slot > lock_sys->waiting_threads && !slot->in_use; i++, --slot) {
-    if (Xslot == slot) {
-      std::cout << "FIND--lock_wait_table_release_slot slot: " << i << std::endl;
-    }
   }
 
   /* Either the array is empty or the last scanned slot is in use. */
@@ -225,16 +217,7 @@ static srv_slot_t *lock_wait_table_reserve_slot(
 
   slot = lock_sys->waiting_threads;
 
-  srv_slot_t *Xslot = lock_sys->waiting_threads;
-  int idx = 0;
   for (uint32_t i = srv_max_n_threads; i--; ++slot) {
-    std::cout << "Flock_wait_table_reserve_slot: " << std::endl;
-    if (Xslot == lock_sys->last_slot) {
-      std::cout << "Rlock_sys-last_slot is slot: " << idx << std::endl;
-    } else {
-      Xslot++;
-      idx++;
-    }
     if (!slot->in_use) {
       slot->reservation_no = lock_wait_table_reservations++;
       slot->in_use = true;
@@ -251,9 +234,7 @@ static srv_slot_t *lock_wait_table_reserve_slot(
       slot->suspend_time = std::chrono::steady_clock::now();
       slot->wait_timeout = wait_timeout;
 
-      std::cout << "FREEincrement-last-slot--lock_wait_table_reserve_slot: " << (slot == lock_sys->last_slot) << std::endl;
       if (slot == lock_sys->last_slot) {
-        std::cout << "increment-last-slot--lock_wait_table_reserve_slot" << std::endl;
         ++lock_sys->last_slot;
       }
 
@@ -371,7 +352,6 @@ void lock_wait_suspend_thread(que_thr_t *thr) {
     was chosen as a deadlock victim: no need to suspend */
 
     if (trx->lock.was_chosen_as_deadlock_victim) {
-      std::cout << "lock_wait_suspend_thread--DB_DEADLOCK" << std::endl;
       trx->error_state = DB_DEADLOCK;
       trx->lock.was_chosen_as_deadlock_victim = false;
 
@@ -395,7 +375,6 @@ void lock_wait_suspend_thread(que_thr_t *thr) {
   }
 
   lock_wait_mutex_exit();
-  std::cout << "lock_wait_suspend_thread" << std::endl;
 
   /* We hold trx->mutex here, which is required to call
   lock_set_lock_and_trx_wait. This means that the value in
@@ -466,7 +445,6 @@ void lock_wait_suspend_thread(que_thr_t *thr) {
   /* Release the slot for others to use */
 
   lock_wait_table_release_slot(slot);
-  std::cout << "lock_wait awake thread err-" << trx->error_state << std::endl;
 
   if (thr->lock_state == QUE_THR_LOCK_ROW) {
     const auto diff_time = std::chrono::steady_clock::now() - start_time;
@@ -684,7 +662,6 @@ static void lock_wait_release_thread_if_suspended(que_thr_t *thr) {
 
   if (thr->slot != nullptr && thr->slot->in_use && thr->slot->thr == thr) {
     if (trx->lock.was_chosen_as_deadlock_victim) {
-      std::cout << "lock_wait_release_thread_if_suspended--DB_DEADLOCK" << std::endl;
       trx->error_state = DB_DEADLOCK;
       trx->lock.was_chosen_as_deadlock_victim = false;
 
@@ -818,7 +795,6 @@ static void lock_wait_try_cancel(trx_t *trx, bool timeout) {
   }
   /* Cancel the lock request queued by the transaction and release possible
   other transactions waiting behind. */
-  std::cout << "lock_wait_try_cancel" << std::endl;
   lock_cancel_waiting_and_release(trx);
 }
 /** Check if the thread lock wait has timed out. Release its locks if the
@@ -886,7 +862,6 @@ static void lock_wait_check_slots_for_timeouts() {
 */
 static uint64_t lock_wait_snapshot_waiting_threads(
     ut::vector<waiting_trx_info_t> &infos) {
-  std::cout << "lock_wait_snapshot_waiting_threads" << std::endl;
   ut_ad(!lock_wait_mutex_own());
   infos.clear();
   lock_wait_mutex_enter();
@@ -907,25 +882,12 @@ static uint64_t lock_wait_snapshot_waiting_threads(
   every X iterations and modify the lock_wait_build_wait_for_graph() to handle
   duplicates in a smart way.
   */
-  std::cout << "1-lock_wait_snapshot_waiting_threads" << std::endl;
   const auto table_reservations = lock_wait_table_reservations;
-  std::cout << "less--lock_wait_snapshot_waiting_threads--in_use: " << (lock_sys->waiting_threads < lock_sys->last_slot) << std::endl;
-  srv_slot_t *slot = lock_sys->waiting_threads;
-  for (uint32_t i = 0; i < srv_max_n_threads; i++, ++slot) { //
-    if (slot == lock_sys->last_slot) {
-      std::cout << "lock_sys-last_slot is slot: " << i << std::endl;
-    }
-  }
-  lock_wait_table_print();
-  lock_clust_wait_table_print();
-
   for (auto slot = lock_sys->waiting_threads; slot < lock_sys->last_slot;
        ++slot) {
-    std::cout << "for--lock_wait_snapshot_waiting_threads--in_use: " << slot->in_use << std::endl;
     if (slot->in_use) {
       auto from = thr_get_trx(slot->thr);
       auto to = from->lock.blocking_trx.load();
-      std::cout << "lock_wait_snapshot_waiting_threads--waiting:" << (to == nullptr) << std::endl;
       if (to != nullptr) {
         infos.push_back({from, to, slot, slot->reservation_no});
       }
@@ -1029,7 +991,6 @@ static void lock_wait_build_wait_for_graph(
 /** Notifies the chosen_victim that it should roll back
 @param[in,out]    chosen_victim   the transaction that should be rolled back */
 static void lock_wait_rollback_deadlock_victim(trx_t *chosen_victim) {
-  std::cout << "lock_wait_rollback_deadlock_victim" << std::endl;
   ut_ad(!trx_mutex_own(chosen_victim));
   /* We need to latch the shard containing wait_lock to read it and access
   the lock itself.*/
@@ -1473,7 +1434,6 @@ static void lock_wait_handle_deadlock(
     trx_t *chosen_victim, const ut::vector<uint> &cycle_ids,
     const ut::vector<waiting_trx_info_t> &infos,
     ut::vector<trx_schedule_weight_t> &new_weights) {
-  std::cout << "lock_wait_handle_deadlock" << std::endl;
   /*  We now update the `schedule_weight`s on the cycle taking into account that
   chosen_victim will be rolled back.
   This is mostly for "correctness" as the impact on performance is negligible
@@ -1505,7 +1465,6 @@ false positive */
 static bool lock_wait_check_candidate_cycle(
     ut::vector<uint> &cycle_ids, const ut::vector<waiting_trx_info_t> &infos,
     ut::vector<trx_schedule_weight_t> &new_weights) {
-  std::cout << "lock_wait_check_candidate_cycle" << std::endl;
   ut_ad(!lock_wait_mutex_own());
   ut_ad(!locksys::owns_exclusive_global_latch());
   lock_wait_mutex_enter();
@@ -1524,7 +1483,6 @@ static bool lock_wait_check_candidate_cycle(
   interested in. This requires lock_wait_mutex, but does not require the
   exclusive global latch. */
   if (!lock_wait_trxs_are_still_in_slots(cycle_ids, infos)) {
-    std::cout << "lock_wait_trxs_are_still_in_slots" << std::endl;
     lock_wait_mutex_exit();
     return false;
   }
@@ -1548,7 +1506,6 @@ static bool lock_wait_check_candidate_cycle(
   */
   locksys::Global_exclusive_latch_guard gurad{UT_LOCATION_HERE};
   if (!lock_wait_trxs_are_still_waiting(cycle_ids, infos)) {
-    std::cout << "lock_wait_trxs_are_still_waiting" << std::endl;
     lock_wait_mutex_exit();
     return false;
   }
@@ -1568,7 +1525,6 @@ static bool lock_wait_check_candidate_cycle(
 
   trx_t *const chosen_victim = lock_wait_choose_victim(cycle_ids, infos);
   ut_a(chosen_victim);
-  std::cout << "handle--lock_wait_check_candidate_cycle" << std::endl;
   lock_wait_handle_deadlock(chosen_victim, cycle_ids, infos, new_weights);
 
   return true;
@@ -1610,7 +1566,6 @@ static void lock_wait_find_and_handle_deadlocks(
     const ut::vector<waiting_trx_info_t> &infos,
     const ut::vector<int> &outgoing,
     ut::vector<trx_schedule_weight_t> &new_weights) {
-  std::cout << "lock_wait_find_and_handle_deadlocks" << std::endl;
   ut_ad(infos.size() == new_weights.size());
   ut_ad(infos.size() == outgoing.size());
   /** We are going to use int and uint to store positions within infos */
@@ -1623,24 +1578,19 @@ static void lock_wait_find_and_handle_deadlocks(
   colors.clear();
   colors.resize(n, 0);
   uint current_color = 0;
-  std::cout << "before-for-lock_wait_find_and_handle_deadlocks n:" << n << std::endl;
   for (uint start = 0; start < n; ++start) {
-    std::cout << "for-lock_wait_find_and_handle_deadlocks" << std::endl;
     if (colors[start] != 0) {
-      std::cout << "start--lock_wait_find_and_handle_deadlocks" << std::endl;
       /* This node was already fully processed*/
       continue;
     }
     ++current_color;
     for (int id = start; 0 <= id; id = outgoing[id]) {
-      std::cout << "2for--lock_wait_find_and_handle_deadlocks id:" << id << " colors[id]:" << colors[id] << std::endl;
       /* We don't expect transaction to deadlock with itself only
       and we do not handle cycles of length=1 correctly */
       ut_ad(id != outgoing[id]);
       if (colors[id] == 0) {
         /* This node was never visited yet */
         colors[id] = current_color;
-        std::cout << "curr--lock_wait_find_and_handle_deadlocks" << std::endl;
         continue;
       }
       /* This node was already visited:
@@ -1652,9 +1602,7 @@ static void lock_wait_find_and_handle_deadlocks(
       if (colors[id] == current_color) {
         /* found a candidate cycle! */
         lock_wait_extract_cycle_ids(cycle_ids, id, outgoing);
-        std::cout << "before--lock_wait_find_and_handle_deadlocks" << std::endl;
         if (lock_wait_check_candidate_cycle(cycle_ids, infos, new_weights)) {
-          std::cout << "lock_wait_find_and_handle_deadlocks" << std::endl;
           MONITOR_INC(MONITOR_DEADLOCK);
         } else {
           MONITOR_INC(MONITOR_DEADLOCK_FALSE_POSITIVES);
