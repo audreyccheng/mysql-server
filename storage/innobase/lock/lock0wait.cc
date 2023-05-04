@@ -52,30 +52,7 @@ static void lock_wait_table_print(void) {
 
   const srv_slot_t *slot = lock_sys->waiting_threads;
 
-  for (uint32_t i = 0; i < 11; i++, ++slot) { //srv_max_n_threads
-    fprintf(
-        stderr,
-        "Slot %lu: thread type %lu, in use %lu, susp %lu, timeout %" PRIu64
-        ", time %" PRIu64 "\n",
-        (ulong)i, (ulong)slot->type, (ulong)slot->in_use,
-        (ulong)slot->suspended,
-        static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::seconds>(slot->wait_timeout)
-                .count()),
-        static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::steady_clock::now() - slot->suspend_time)
-                .count()));
-  }
-}
-
-/** Print the contents of the lock_sys_t::clust_waiting_threads array. */
-static void lock_clust_wait_table_print(void) {
-  ut_ad(lock_wait_mutex_own());
-
-  const srv_slot_t *slot = lock_sys->clust_waiting_threads;
-
-  for (uint32_t i = 0; i < 11; i++, ++slot) { //srv_max_n_threads
+  for (uint32_t i = 0; i < srv_max_n_threads; i++, ++slot) {
     fprintf(
         stderr,
         "Slot %lu: thread type %lu, in use %lu, susp %lu, timeout %" PRIu64
