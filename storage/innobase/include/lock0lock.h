@@ -1104,6 +1104,8 @@ struct lock_sys_t {
   Protected by lock_sys->wait_mutex. */
   srv_slot_t *last_slot;
 
+  char pad3[ut::INNODB_CACHE_LINE_SIZE];
+
   /** Array of user threads suspended while waiting for cluster locks within InnoDB.
   Protected by the lock_sys->wait_mutex. */
   srv_slot_t *clust_waiting_threads;

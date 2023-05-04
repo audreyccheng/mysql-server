@@ -300,7 +300,7 @@ void lock_sys_create(
 {
   ulint lock_sys_sz;
 
-  lock_sys_sz = sizeof(*lock_sys) + srv_max_n_threads * sizeof(srv_slot_t);
+  lock_sys_sz = sizeof(*lock_sys) + srv_max_n_threads * sizeof(srv_slot_t) * 2;
 
   lock_sys = static_cast<lock_sys_t *>(
       ut::zalloc_withkey(UT_NEW_THIS_FILE_PSI_KEY, lock_sys_sz));
@@ -313,7 +313,12 @@ void lock_sys_create(
 
   lock_sys->last_slot = lock_sys->waiting_threads;
 
-  lock_sys->clust_waiting_threads = static_cast<srv_slot_t *>(ptr);
+  void *ptr_clust = &lock_sys[1];
+  srv_slot_t *slot = static_cast<srv_slot_t *>(ptr_clust);
+  for (uint32_t i = 0; i <= srv_max_n_threads; i++, ++slot) {
+    /* No-op. */
+  }
+  lock_sys->clust_waiting_threads = slot;
 
   lock_sys->clust_last_slot = lock_sys->clust_waiting_threads;
 

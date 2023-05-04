@@ -6017,7 +6017,7 @@ func_exit:
 
   ut_a(!trx->has_search_latch);
 
-  std::cout << "row0sel err-" << err << std::endl;
+  // std::cout << "row0sel err-" << err << std::endl;
   return err;
 }
 

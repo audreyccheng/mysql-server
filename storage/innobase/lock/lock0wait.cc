@@ -52,7 +52,30 @@ static void lock_wait_table_print(void) {
 
   const srv_slot_t *slot = lock_sys->waiting_threads;
 
-  for (uint32_t i = 0; i < srv_max_n_threads; i++, ++slot) {
+  for (uint32_t i = 0; i < 11; i++, ++slot) { //srv_max_n_threads
+    fprintf(
+        stderr,
+        "Slot %lu: thread type %lu, in use %lu, susp %lu, timeout %" PRIu64
+        ", time %" PRIu64 "\n",
+        (ulong)i, (ulong)slot->type, (ulong)slot->in_use,
+        (ulong)slot->suspended,
+        static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::seconds>(slot->wait_timeout)
+                .count()),
+        static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - slot->suspend_time)
+                .count()));
+  }
+}
+
+/** Print the contents of the lock_sys_t::clust_waiting_threads array. */
+static void lock_clust_wait_table_print(void) {
+  ut_ad(lock_wait_mutex_own());
+
+  const srv_slot_t *slot = lock_sys->clust_waiting_threads;
+
+  for (uint32_t i = 0; i < 11; i++, ++slot) { //srv_max_n_threads
     fprintf(
         stderr,
         "Slot %lu: thread type %lu, in use %lu, susp %lu, timeout %" PRIu64
@@ -74,6 +97,7 @@ static void lock_wait_table_print(void) {
 static void lock_wait_table_release_slot(
     srv_slot_t *slot) /*!< in: slot to release */
 {
+  std::cout << "lock_wait_table_release_slot" << std::endl;
 #ifdef UNIV_DEBUG
   srv_slot_t *upper = lock_sys->waiting_threads + srv_max_n_threads;
 #endif /* UNIV_DEBUG */
@@ -103,6 +127,13 @@ static void lock_wait_table_release_slot(
   for (slot = lock_sys->last_slot;
        slot > lock_sys->waiting_threads && !slot->in_use; --slot) {
     /* No op */
+  }
+
+  srv_slot_t *Xslot = lock_sys->last_slot;
+  for (uint32_t i = 0; i < srv_max_n_threads && slot > lock_sys->waiting_threads && !slot->in_use; i++, --slot) {
+    if (Xslot == slot) {
+      std::cout << "FIND--lock_wait_table_release_slot slot: " << i << std::endl;
+    }
   }
 
   /* Either the array is empty or the last scanned slot is in use. */
@@ -194,7 +225,16 @@ static srv_slot_t *lock_wait_table_reserve_slot(
 
   slot = lock_sys->waiting_threads;
 
+  srv_slot_t *Xslot = lock_sys->waiting_threads;
+  int idx = 0;
   for (uint32_t i = srv_max_n_threads; i--; ++slot) {
+    std::cout << "Flock_wait_table_reserve_slot: " << std::endl;
+    if (Xslot == lock_sys->last_slot) {
+      std::cout << "Rlock_sys-last_slot is slot: " << idx << std::endl;
+    } else {
+      Xslot++;
+      idx++;
+    }
     if (!slot->in_use) {
       slot->reservation_no = lock_wait_table_reservations++;
       slot->in_use = true;
@@ -211,7 +251,9 @@ static srv_slot_t *lock_wait_table_reserve_slot(
       slot->suspend_time = std::chrono::steady_clock::now();
       slot->wait_timeout = wait_timeout;
 
+      std::cout << "FREEincrement-last-slot--lock_wait_table_reserve_slot: " << (slot == lock_sys->last_slot) << std::endl;
       if (slot == lock_sys->last_slot) {
+        std::cout << "increment-last-slot--lock_wait_table_reserve_slot" << std::endl;
         ++lock_sys->last_slot;
       }
 
@@ -260,7 +302,7 @@ static srv_slot_t *lock_clust_wait_table_reserve_slot(
 
   for (uint32_t i = srv_max_n_threads; i--; ++slot) {
     if (!slot->in_use) {
-      slot->reservation_no = lock_wait_table_reservations++;
+      slot->reservation_no = 0;
       slot->in_use = true;
       slot->thr = thr;
       slot->thr->slot = slot;
@@ -844,6 +886,7 @@ static void lock_wait_check_slots_for_timeouts() {
 */
 static uint64_t lock_wait_snapshot_waiting_threads(
     ut::vector<waiting_trx_info_t> &infos) {
+  std::cout << "lock_wait_snapshot_waiting_threads" << std::endl;
   ut_ad(!lock_wait_mutex_own());
   infos.clear();
   lock_wait_mutex_enter();
@@ -864,12 +907,25 @@ static uint64_t lock_wait_snapshot_waiting_threads(
   every X iterations and modify the lock_wait_build_wait_for_graph() to handle
   duplicates in a smart way.
   */
+  std::cout << "1-lock_wait_snapshot_waiting_threads" << std::endl;
   const auto table_reservations = lock_wait_table_reservations;
+  std::cout << "less--lock_wait_snapshot_waiting_threads--in_use: " << (lock_sys->waiting_threads < lock_sys->last_slot) << std::endl;
+  srv_slot_t *slot = lock_sys->waiting_threads;
+  for (uint32_t i = 0; i < srv_max_n_threads; i++, ++slot) { //
+    if (slot == lock_sys->last_slot) {
+      std::cout << "lock_sys-last_slot is slot: " << i << std::endl;
+    }
+  }
+  lock_wait_table_print();
+  lock_clust_wait_table_print();
+
   for (auto slot = lock_sys->waiting_threads; slot < lock_sys->last_slot;
        ++slot) {
+    std::cout << "for--lock_wait_snapshot_waiting_threads--in_use: " << slot->in_use << std::endl;
     if (slot->in_use) {
       auto from = thr_get_trx(slot->thr);
       auto to = from->lock.blocking_trx.load();
+      std::cout << "lock_wait_snapshot_waiting_threads--waiting:" << (to == nullptr) << std::endl;
       if (to != nullptr) {
         infos.push_back({from, to, slot, slot->reservation_no});
       }
