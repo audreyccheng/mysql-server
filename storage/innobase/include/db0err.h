@@ -50,7 +50,6 @@ enum dberr_t {
   DB_OUT_OF_FILE_SPACE,
   DB_OUT_OF_DISK_SPACE,
   DB_LOCK_WAIT,
-  DB_LOCK_CLUST_WAIT,
   DB_DEADLOCK,
   DB_ROLLBACK,
   DB_DUPLICATE_KEY,
@@ -63,6 +62,7 @@ enum dberr_t {
   DB_LOCK_NOWAIT,
   /** no session temporary tablespace could be allocated */
   DB_NO_SESSION_TEMP,
+  DB_LOCK_CLUST_WAIT,
   DB_CLUSTER_NOT_FOUND = 30,
   DB_TABLE_NOT_FOUND,
   /** the database has to be stopped and restarted with more file space */

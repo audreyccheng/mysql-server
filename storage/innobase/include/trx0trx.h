@@ -865,7 +865,7 @@ struct trx_t {
                        current operation, or an empty
                        string */
 
-  /** Scheduling cluster that this transaction is assigned to. */
+  /* Scheduling cluster that this transaction is assigned to. */
   uint16_t cluster_id;
 
   /** Current isolation level */

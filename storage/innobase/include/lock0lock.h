@@ -669,16 +669,21 @@ waiting transaction.
 @param[in,out]    lock    waiting cluster lock request */
 void lock_clust_grant(lock_clust_t *lock);
 
+/** Get the next idx for the schedule based on clust_sched_idx. */
+uint32_t next_sched_idx();
+
+/** Get the prev idx for the schedule based on clust_sched_idx. */
+uint32_t prev_sched_idx(trx_t &trx);
+
 /** Find the next available cluster and release the cluster lock of that
  transaction. */
 void release_next_clust();
 
 /** Starts the scheduling process for transaction.
- @param[in,out] queued     whether transaction has already queued on cluster lock.
- @param[in,out]  trx             transaction
- @param[in,out]  thr             query thread of transaction
- @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
-dberr_t trx_sched_start_low(bool queued, trx_t *trx, que_thr_t *thr);
+@param[in,out]  trx             transaction
+@param[in,out]  thr             query thread of transaction
+@return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
+dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr);
 
 /** Computes trx's cluster given its type and arguments.
 @param[in]      typ             Type of transaction

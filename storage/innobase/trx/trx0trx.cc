@@ -2219,6 +2219,19 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
   DBUG_EXECUTE_IF("ib_trx_commit_crash_before_trx_commit_start",
                   DBUG_SUICIDE(););
 
+  /* If all ongoing trxs have completed for a cluster, release the
+  next waiting cluster. */
+  if (trx->cluster_id != 0) {
+    mutex_enter(&trx_sys->mutex);
+    trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
+    std::cout << "committing cluster: " << trx->cluster_id <<
+    " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+    if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+      release_next_clust();
+    }
+    mutex_exit(&trx_sys->mutex);
+  }
+
   if (trx_is_rseg_updated(trx)) {
     mtr = &local_mtr;
 
@@ -2376,7 +2389,6 @@ que_thr_t *trx_commit_step(que_thr_t *thr) /*!< in: query thread */
     trx_commit_or_rollback_prepare(trx);
 
     trx->lock.que_state = TRX_QUE_COMMITTING;
-
     trx_commit(trx);
 
     ut_ad(trx->lock.wait_thr == nullptr);
@@ -2437,7 +2449,6 @@ dberr_t trx_commit_for_mysql(trx_t *trx) /*!< in/out: transaction */
       if (trx->id != 0) {
         trx_update_mod_tables_timestamp(trx);
       }
-
       trx_commit(trx);
 
       MONITOR_DEC(MONITOR_TRX_ACTIVE);
@@ -3556,7 +3567,19 @@ void trx_kill_blocking(trx_t *trx) {
     ut_a(!victim_trx->read_only);
     ut_a(victim_trx->mysql_thd != nullptr);
 
-    trx_mutex_exit(victim_trx);
+    /* If all ongoing trxs have completed or rolled back for a cluster,
+    release the next waiting cluster. */
+    // if (victim_trx->cluster_id != 0) {
+    //   mutex_enter(&trx_sys->mutex);
+    //   trx_sys->sched_counts[victim_trx->cluster_id]->fetch_sub(1);
+    //   std::cout << "killing cluster: " << victim_trx->cluster_id <<
+    //   " count: " << trx_sys->sched_counts[victim_trx->cluster_id]->load() << std::endl;
+    //   if (trx_sys->sched_counts[victim_trx->cluster_id]->load() == 0) {
+    //     release_next_clust();
+    //   }
+    //   mutex_exit(&trx_sys->mutex);
+    // }
+    // trx_mutex_exit(victim_trx);
 
 #ifdef UNIV_DEBUG
     char buffer[1024];

@@ -97,6 +97,19 @@ static void trx_rollback_to_savepoint_low(
     assert_trx_nonlocking_or_in_list(trx);
   }
 
+  // /* If all ongoing trxs have completed or rolled back for a cluster,
+  // release the next waiting cluster. */
+  // if (trx->cluster_id != 0 && trx->error_state == DB_DEADLOCK) {
+  //   mutex_enter(&trx_sys->mutex);
+  //   trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
+  //   std::cout << "trx_rollback_to_savepoint_low cluster: " << trx->cluster_id <<
+  //   " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+  //   if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+  //     release_next_clust();
+  //   }
+  //   mutex_exit(&trx_sys->mutex);
+  // }
+
   trx->error_state = DB_SUCCESS;
 
   if (trx_is_rseg_updated(trx)) {
@@ -158,13 +171,27 @@ dberr_t trx_rollback_to_savepoint(
 static dberr_t trx_rollback_for_mysql_low(
     trx_t *trx) /*!< in/out: transaction */
 {
+
+
+  /* If all ongoing trxs have completed or rolled back for a cluster,
+  release the next waiting cluster. */
+  // if (trx->cluster_id != 0) {
+  //   mutex_enter(&trx_sys->mutex);
+  //   // trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
+  //   std::cout << "rolling back cluster: " << trx->cluster_id <<
+  //   " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+  //   if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+  //     release_next_clust();
+  //   }
+  //   mutex_exit(&trx_sys->mutex);
+  // }
+
   trx->op_info = "rollback";
 
   /* If we are doing the XA recovery of prepared transactions,
   then the transaction object does not have an InnoDB session
   object, and we set a dummy session that we use for all MySQL
   transactions. */
-
   trx_rollback_to_savepoint_low(trx, nullptr);
 
   trx->op_info = "";

@@ -260,7 +260,7 @@ static srv_slot_t *lock_clust_wait_table_reserve_slot(
 
   for (uint32_t i = srv_max_n_threads; i--; ++slot) {
     if (!slot->in_use) {
-      slot->reservation_no = lock_wait_table_reservations++;
+      slot->reservation_no = 0;
       slot->in_use = true;
       slot->thr = thr;
       slot->thr->slot = slot;
@@ -283,7 +283,7 @@ static srv_slot_t *lock_clust_wait_table_reserve_slot(
             lock_sys->clust_waiting_threads + srv_max_n_threads);
 
       /* TODO(accheng): add this if we add timeout for cluster locks */
-      // lock_wait_request_check_for_cycles();
+      // clust_lock_wait_request_check_for_cycles();
       return (slot);
     }
   }
@@ -473,7 +473,8 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   incomplete transactions that are being rolled back after crash
   recovery) will use the global value of
   innodb_lock_wait_timeout, because trx->mysql_thd == NULL. */
-  const auto lock_wait_timeout = trx_lock_wait_timeout_get(trx);
+  // TODO(accheng): cluster lock wait timeout is currently hardcoded
+  const auto lock_wait_timeout = std::chrono::milliseconds(200); // trx_lock_wait_timeout_get(trx);
 
   lock_wait_mutex_enter();
 
@@ -539,7 +540,6 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   }
 
   /* Release the slot for others to use */
-
   lock_clust_wait_table_release_slot(slot);
 
   // TODO(accheng): add stats and thd wait time for cluster lock
@@ -568,6 +568,18 @@ void lock_clust_wait_suspend_thread(que_thr_t *thr) {
   // }
 
   if (trx_is_interrupted(trx)) {
+    /* Update cluster dep count and release next cluster if needed. */
+    if (trx->cluster_id != 0) {
+      mutex_enter(&trx_sys->mutex);
+      trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
+      std::cout << "interrupted: " << trx->cluster_id <<
+      " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+      if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
+        release_next_clust();
+      }
+      mutex_exit(&trx_sys->mutex);
+    }
+
     trx->error_state = DB_INTERRUPTED;
   }
 }
@@ -1490,7 +1502,6 @@ static bool lock_wait_check_candidate_cycle(
 
   trx_t *const chosen_victim = lock_wait_choose_victim(cycle_ids, infos);
   ut_a(chosen_victim);
-
   lock_wait_handle_deadlock(chosen_victim, cycle_ids, infos, new_weights);
 
   return true;
@@ -1698,6 +1709,7 @@ updates schedule weights. */
 void lock_wait_timeout_thread() {
   int64_t sig_count = 0;
   os_event_t event = lock_sys->timeout_event;
+
 
   ut_ad(!srv_read_only_mode);
 

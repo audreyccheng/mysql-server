@@ -5733,6 +5733,7 @@ func_exit:
   err =
       convert_error_code_to_mysql(error, 0, thd);
 
+  // std::cout << "start_trx-" << err << std::endl;
   return err;
 }
 
@@ -5772,9 +5773,7 @@ static int innobase_start_trx_for(
   /* Assign a cluster id for this transaction. */
   // TODO(jchan): Commented because the trx type array is hardcoded, so args
   // may cause out-of-bounds access.
-  //
-  // trx->cluster_id = trx_get_cluster_no(typ, args);
-  trx->cluster_id = 0;
+  trx->cluster_id = trx_get_cluster_no(typ, args);
 
   /* Assign a read view if the transaction does not have it yet.
   Do this only if transaction is using REPEATABLE READ isolation

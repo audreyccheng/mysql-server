@@ -572,12 +572,20 @@ struct trx_sys_t {
   /** Number of transaction types. */
   uint16_t num_trx_types;
 
-  /** Index for cluster schedule (protected by trx_sys_mutex). */
+  /** Index for the next cluster to be executed in cluster schedule
+  (protected by trx_sys_mutex). */
   uint32_t cluster_sched_idx;
+
+  /** Number of waiting cluster locks (protected by trx_sys_mutex). */
+  uint32_t waiting_clust_locks;
 
   /** Cluster schedule index corresponding to clusters vector.
   First value is a no-op cluster. */
   std::vector<uint32_t> cluster_sched;
+
+  /** Each entry represents number of ongoing transactions of a
+  cluster (protected by trx_sys_mutex). */
+  std::vector<ut::unique_ptr<std::atomic_int>> sched_counts;
 
   /** Array of cluster hot key vectors where each row is a cluster and each
   column represents a hot key. Even columns are reads to hot keys while

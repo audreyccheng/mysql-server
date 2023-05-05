@@ -238,6 +238,14 @@ static inline ulint lock_get_wait(const lock_t *lock) /*!< in: lock */
   return (lock->type_mode & LOCK_WAIT);
 }
 
+static inline void lock_clust_hash(rw_lock_t *hash_lock) {
+  rw_lock_x_lock(hash_lock, UT_LOCATION_HERE);
+}
+
+static inline void unlock_clust_hash(rw_lock_t *hash_lock) {
+  rw_lock_x_unlock(hash_lock);
+}
+
 static inline lock_clust_t *lock_clust_pop(uint16_t cluster_id) {
   ut_ad(trx_sys->num_clusters >= cluster_id);
 
@@ -252,6 +260,19 @@ static inline lock_clust_t *lock_clust_pop(uint16_t cluster_id) {
   rw_lock_x_unlock(hash_lock);
   return found;
 }
+
+static inline lock_clust_t *lock_clust_pop_nl(uint16_t cluster_id) {
+  ut_ad(trx_sys->num_clusters >= cluster_id);
+
+  lock_clust_t *found;
+  found = static_cast<lock_clust_t *>(hash_get_first(lock_sys->cluster_hash,
+                          hash_calc_cell_id(cluster_id, lock_sys->cluster_hash)));
+  if (found) {
+    HASH_DELETE(lock_clust_t, hash, lock_sys->cluster_hash, cluster_id, found);
+  }
+  return found;
+}
+
 
 /* Add cluster lock to end of queue. */
 static inline void lock_clust_push(lock_clust_t *lock) {
