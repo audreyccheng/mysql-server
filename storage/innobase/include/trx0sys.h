@@ -579,6 +579,8 @@ struct trx_sys_t {
   /** Number of waiting cluster locks (protected by trx_sys_mutex). */
   uint32_t waiting_clust_locks;
 
+  uint16_t num_k;
+
   /** Cluster schedule index corresponding to clusters vector.
   First value is a no-op cluster. */
   std::vector<uint32_t> cluster_sched;
@@ -596,6 +598,11 @@ struct trx_sys_t {
   Each row is a transaction type and each entry in a row is ordered based on
   argument order. */
   std::vector<std::vector<int>> trx_type_len_arr;
+
+  std::vector<std::vector<int>> training_data;
+
+  std::vector<int> labels;
+
 
   /** @} */
 

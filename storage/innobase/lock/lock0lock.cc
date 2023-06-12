@@ -2251,18 +2251,50 @@ static void update_sched_idx(uint16_t cluster_id) {
   }
 }
 
+/** Returns true if there are no ongoing transactions of this cluster. */
+static bool check_ongoing_clust(uint16_t cluster) {
+  return (lock_clust_peek(cluster) == NULL) && (trx_sys->sched_counts[22]->load() == 0);
+}
+
+static void check_partial_release(uint16_t cluster) {
+  if (cluster == 1 && lock_clust_peek(22) != NULL && trx_sys->sched_counts[22]->load() == 0) { //
+    partial_release_next_clust(22);
+  } else if (cluster == 2 && lock_clust_peek(21) != NULL && trx_sys->sched_counts[21]->load() == 0) { //
+    partial_release_next_clust(21);
+  }
+}
+
+static void print_all_ongoing_trx() {
+  bool found = false;
+  int clusters[] = {1,2,21,22};
+  for (int cluster : clusters) {
+    std::cout << "cluster: " << cluster << " locks: " << (lock_clust_peek(cluster) != NULL)
+    << " ongoing: " << trx_sys->sched_counts[cluster]->load() << std::endl;
+    if (lock_clust_peek(cluster) != NULL || trx_sys->sched_counts[cluster]->load() !=0) {
+      found = true;
+    }
+  }
+  if (!found) {
+    trx_sys->cluster_sched_idx = 0;
+  }
+}
+
 /** Find the next available cluster and release the cluster lock of that
  transaction. */
 void release_next_clust() {
   ut_ad(trx_sys_mutex_own());
 
+  // std::cout << "release_next_clust cluster_sched_idx:" << trx_sys->cluster_sched_idx << std::endl;
+
   uint32_t curr_idx = trx_sys->cluster_sched_idx;
   uint16_t cluster = trx_sys->cluster_sched[curr_idx];
 
+  bool found = false;
   rw_lock_t *hash_lock = hash_get_lock(lock_sys->cluster_hash, cluster);
   lock_clust_hash(hash_lock);
   lock_clust_t *next_lock = lock_clust_pop_nl(cluster);
   while (next_lock != NULL) {
+    found = true;
     // std::cout << "releasing cluster: " << cluster << std::endl;
     trx_sys->sched_counts[cluster]->fetch_add(1);
 
@@ -2274,7 +2306,120 @@ void release_next_clust() {
 
   trx_sys->cluster_sched_idx = next_sched_idx();
   unlock_clust_hash(hash_lock);
+
+    // NEW CODE
+  // check_partial_release(cluster);
+  // // if (!found) {
+  // //   std::cout << "no locks: " << cluster << std::endl;
+  // //   print_all_ongoing_trx();
+  // // }
+}
+
+static bool check_ongoing_phase(uint16_t cluster) {
+  if (trx_sys->cluster_sched_idx == 0) {
+    return true;
+  }
+
+  if (trx_sys->sched_counts[1]->load() == 0 && trx_sys->sched_counts[2]->load() == 0 &&
+      lock_clust_peek(1) == NULL && lock_clust_peek(2) == NULL) {
+    return true;
+  }
+
+  // trx_sys->cluster_sched_idx represents next cluster
+  if (cluster == 22) { // P-W1
+    if (trx_sys->cluster_sched_idx == 1 && trx_sys->sched_counts[2]->load() != 0) { // NO-W1
+      // std::cout << "NO-GO check_ongoing_phase cluster: " << cluster << " trx_sys->cluster_sched_idx: " << trx_sys->cluster_sched_idx << std::endl;
+      return false;
+    }
+  } else { // P-W2
+    if (trx_sys->cluster_sched_idx == 2 && trx_sys->sched_counts[1]->load() != 0) { // NO-W2
+      // std::cout << "NO-GO check_ongoing_phase cluster: " << cluster << " trx_sys->cluster_sched_idx: " << trx_sys->cluster_sched_idx << std::endl;
+      return false;
+    }
+  }
+  // std::cout << "GO check_ongoing_phase cluster: " << cluster
+  // << " trx_sys->cluster_sched_idx: " << trx_sys->cluster_sched_idx
+  // << " ongoing count: " << trx_sys->sched_counts[trx_sys->cluster_sched_idx]->load()
+  // << std::endl;
+  return true;
+}
+
+static bool partial_release_next_lock(uint16_t cluster) {
+  bool found = false;
+  rw_lock_t *hash_lock = hash_get_lock(lock_sys->cluster_hash, cluster);
+  lock_clust_hash(hash_lock);
+  lock_clust_t *next_lock = lock_clust_pop_nl(cluster);
+
+  if (next_lock != NULL) { // && check_ongoing_phase(cluster)) {
+    found = true;
+    // std::cout << "partial releasing cluster: " << cluster << std::endl;
+    trx_sys->sched_counts[cluster]->fetch_add(1);
+
+    /* Release cluster lock. */
+    lock_clust_grant(next_lock);
+  }
+  unlock_clust_hash(hash_lock);
+
+  return found;
+}
+
+ /** Find the next available cluster and release only the next cluster lock
+of that transaction. */
+void partial_release_next_clust(uint16_t cluster) {
+  ut_ad(trx_sys_mutex_own());
+
+  if (check_ongoing_phase(cluster)) {
+    partial_release_next_lock(cluster);
+  }
+
+  // if (!partial_release_next_lock(cluster)) {
+  //   std::cout << "no partial locks" << std::endl;
+  //   if (trx_sys->sched_counts[1]->load() == 0 && trx_sys->sched_counts[2]->load() == 0 &&
+  //       lock_clust_peek(1) == NULL && lock_clust_peek(2) == NULL) {
+  //     std::cout << "no more phases cluster: " << cluster << " 21 queued: " << (lock_clust_peek(21) != NULL)
+  //     << " 22 queued: " << (lock_clust_peek(22) != NULL) << std::endl;
+  //     if (cluster == 21 && lock_clust_peek(22) != NULL) {
+  //       partial_release_next_lock(22);
+  //     } else if (cluster == 22 && lock_clust_peek(21) != NULL) {
+  //       partial_release_next_lock(21);
+  //     }
+  //     std::cout << "done cluster: " << cluster << std::endl;
+  //   }
+  // }
  }
+
+/** Starts the scheduling process for transaction with intra-cluster deps.
+ @param[in,out]  trx             transaction
+ @param[in,out]  thr             query thread of transaction
+ @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
+dberr_t partial_trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
+
+  mutex_enter(&trx_sys->mutex);
+  // std::cout << "partial trx cluster: " << trx->cluster_id << std::endl;
+  if (trx->cluster_id > 30) {
+    mutex_exit(&trx_sys->mutex);
+
+    return (DB_SUCCESS);
+  }
+
+  if (lock_clust_peek(trx->cluster_id) != NULL || trx_sys->sched_counts[trx->cluster_id]->load() != 0 //) {
+      || !check_ongoing_phase(trx->cluster_id)) {
+    // std::cout << "queuing cluster: " << trx->cluster_id << std::endl;
+    queue_clust_trx(trx, thr);
+
+    mutex_exit(&trx_sys->mutex);
+
+    return (DB_LOCK_CLUST_WAIT);
+
+  } else {
+    // std::cout << "go cluster: " << trx->cluster_id << std::endl;
+    trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
+
+    mutex_exit(&trx_sys->mutex);
+
+    return (DB_SUCCESS);
+  }
+}
 
 /** Starts the scheduling process for transaction.
  @param[in,out]  trx             transaction
@@ -2284,6 +2429,8 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
   // std::cout << "trx cluster: " << trx->cluster_id << std::endl;
   if (trx_sys->cluster_sched_idx == 0) {
     mutex_enter(&trx_sys->mutex);
+    // std::cout<< "1-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+    //       << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
     if (trx_sys->cluster_sched_idx != 0) {
       /* A transaction doesn't need to wait for a cluster lock if there
       are no other transactions running. */
@@ -2291,8 +2438,7 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
       // if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
       //     trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
       if (!check_ongoing_trx()) {
-        // std::cout<< "1-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
-        //   << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+
         trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
 
         /* Update cluster_sched_idx appropriately. */
@@ -2319,14 +2465,15 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
   } else {
     /* Add transaction to appropriate cluster lock. */
     mutex_enter(&trx_sys->mutex);
+    // std::cout << "trx cluster: " << trx->cluster_id << std::endl;
     /* A transaction doesn't need to wait for a cluster lock if there
       are no other transactions running. */
       // TODO(accheng): update when there are more than 2 clusters
     // if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
     //     trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
-    if (!check_ongoing_trx()) {
       // std::cout<< "2-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
       //     << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+    if (!check_ongoing_trx()) {
       trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
 
       /* Update cluster_sched_idx appropriately. */
@@ -2343,18 +2490,32 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
   }
 }
 
+/** Function to calculate Euclidean distance between two vectors. */
+static double calculate_distance(const std::vector<int>& p1, const std::vector<int>& p2) {
+  double distance = 0.0;
+  for (size_t i = 0; i < p1.size(); ++i) {
+    distance += std::pow(p1[i] - p2[i], 2);
+  }
+  return std::sqrt(distance);
+}
+
 /** Computes trx's cluster given its type and arguments.
 @param[in]      typ             Type of transaction
 @param[in]      args            Transaction arguments
 @return cluster that trx belongs to */
-uint16_t trx_get_cluster_no(uint type, std::vector<int> args) {
+uint16_t trx_get_cluster_no(int type, std::vector<int> args) {
   /* Construct hot key array for this transaction based on type and args. */
+  // return (uint16_t) type + 1;
+  return type;
+
   // std::cout << "type " << type << std::endl;
-  if (type == 0) { //|| type == 1) { //
-    return 1;
-  } else {
-    return 2;
-  }
+  // if (type == 0) { //|| type == 1) { //
+  //   return 1;
+
+
+  // } else {
+  //   return 2;
+  // }
 
   // } else if (type == 1) {
   //   return 2;
@@ -2363,12 +2524,84 @@ uint16_t trx_get_cluster_no(uint type, std::vector<int> args) {
   // } else {
   //   return 4;
   // }
+
+  // } else if (type == 1) {
+  //   return 2;
+  // } else if (type == 2) {
+  //   return 3;
+  // } else if (type == 3) {
+  //   return 4;
+  // } else if (type == 4) {
+  //   return 5;
+  // } else {
+  //   return 6;
+  // }
+
+  // } else if (type == 1) {
+  //   return 2;
+  // } else if (type == 2) {
+  //   return 3;
+  // } else if (type == 3) {
+  //   return 4;
+  // } else if (type == 4) {
+  //   return 5;
+  // } else if (type == 5) {
+  //   return 6;
+  // } else if (type == 6) {
+  //   return 7;
+  // } else {
+  //   return 8;
+  // }
+  // } else if (type == 8) {
+  //   return 9;
+  // } else {
+  //   return 10;
+  // }
+
   // } else if (type == 1) {
   //   return 2;
   // } else {
   //   return 3;
   // }
+////////////////////////////////////////////////////////////////
+  std::vector<int> test_vector(args.size() + 1);
+  test_vector[0] = type;
+  for (int i = 1; i <= args.size(); i++) {
+    test_vector[i] = args[i];
+  }
 
+  // Create a vector to store distances from the test point to all training points
+  std::vector<std::pair<double, int>> distances;
+  for (int i = 0; i < trx_sys->training_data.size(); i++) {
+      double distance = calculate_distance(trx_sys->training_data[i], test_vector);
+      distances.emplace_back(distance, trx_sys->labels[i]);
+      // std::cout << "distance: " << distance << " label: " << trx_sys->labels[i] << std::endl;
+  }
+
+  // Sort the distances in ascending order
+  std::sort(distances.begin(), distances.end());
+
+  // Count the labels of the k nearest neighbors
+  std::vector<int> label_counts(trx_sys->labels.size(), 0);
+  for (int i = 0; i < trx_sys->num_k; ++i) {
+      label_counts[distances[i].second]++;
+      // std::cout << "close distance: " << distances[i].second << std::endl;
+  }
+
+  // Find the most frequent label
+  int max_count = -1;
+  int predicted_label = -1;
+  for (int i = 0; i < trx_sys->labels.size(); ++i) {
+      if (label_counts[i] > max_count) {
+          max_count = label_counts[i];
+          predicted_label = i;
+      }
+  }
+  // std::cout << "max_count: " << max_count << std::endl;
+  // std::cout << "determined cluster: " << predicted_label << std::endl;
+
+  return predicted_label;
+////////////////////////////////////////////////////////////////
   // std::vector<int> trx_hot_key_arr(trx_sys->num_hot_keys * 2);
   // std::cout << "type " << type;
   // for (size_t i = 0; i < args.size(); ++i) {

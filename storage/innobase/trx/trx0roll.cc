@@ -178,8 +178,8 @@ static dberr_t trx_rollback_for_mysql_low(
   // if (trx->cluster_id != 0) {
   //   mutex_enter(&trx_sys->mutex);
   //   // trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
-  //   std::cout << "rolling back cluster: " << trx->cluster_id <<
-  //   " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+    // std::cout << "rolling back cluster: " << trx->cluster_id <<
+    // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
   //   if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
   //     release_next_clust();
   //   }

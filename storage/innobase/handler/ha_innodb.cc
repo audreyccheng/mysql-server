@@ -1645,7 +1645,7 @@ static void innodb_pre_dd_shutdown(handlerton *) {
 static int start_trx(
   THD *thd,
   trx_t *trx,
-  uint typ,
+  int typ,
   const std::vector<int> &args);
 
 /** Start a parameterized transaction.
@@ -1657,7 +1657,7 @@ static int start_trx(
 static int innobase_start_trx_for(
     handlerton *hton,
     THD *thd,
-    uint typ,
+    int typ,
     const std::vector<int> &args);
 
 /** Creates an InnoDB transaction struct for the thd if it does not yet have
@@ -5714,7 +5714,7 @@ void innobase_commit_low(trx_t *trx) /*!< in: transaction handle */
   trx->will_lock = 0;
 }
 
-static int start_trx(THD *thd, trx_t *trx, uint typ, const std::vector<int> &args) {
+static int start_trx(THD *thd, trx_t *trx, int typ, const std::vector<int> &args) {
   int err;
   dberr_t error;
 
@@ -5741,7 +5741,7 @@ func_exit:
 static int innobase_start_trx_for(
   handlerton *hton,
   THD *thd,
-  uint typ,
+  int typ,
   const std::vector<int> &args)
 {
   // TODO(jchan): Implement.
@@ -5750,7 +5750,7 @@ static int innobase_start_trx_for(
   //   std::cout << arg << ",";
   // }
   // std::cout << std::endl;
-  // return 0;
+  return 0;
 
   DBUG_TRACE;
   assert(hton == innodb_hton_ptr);
@@ -5784,7 +5784,7 @@ static int innobase_start_trx_for(
   // TODO(accheng): support other isolation levels eventually?
   if (trx->isolation_level != TRX_ISO_SERIALIZABLE) {
     push_warning_printf(thd, Sql_condition::SL_WARNING, HA_ERR_UNSUPPORTED,
-                        "InnoDB: Cluster scheudling can only"
+                        "InnoDB: Cluster scheduling can only"
                         " be used with"
                         " SERIALIZABLE isolation level.");
     trx->isolation_level = TRX_ISO_SERIALIZABLE;

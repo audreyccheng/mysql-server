@@ -2221,14 +2221,24 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
 
   /* If all ongoing trxs have completed for a cluster, release the
   next waiting cluster. */
-  if (trx->cluster_id != 0) {
+  if (trx->cluster_id != 0) { // && trx->cluster_id != 100
     mutex_enter(&trx_sys->mutex);
     trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
-    std::cout << "committing cluster: " << trx->cluster_id <<
-    " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+
+    // NEW CODE
+    // if (trx->cluster_id > 20) {
+    // std::cout << "partial committing cluster: " << trx->cluster_id <<
+    // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+    // partial_release_next_clust(trx->cluster_id);
+    // } else {
+    // // OLD CODE
+    // std::cout << "committing cluster: " << trx->cluster_id <<
+    // " count: " << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
     if (trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
       release_next_clust();
     }
+    // }
+
     mutex_exit(&trx_sys->mutex);
   }
 

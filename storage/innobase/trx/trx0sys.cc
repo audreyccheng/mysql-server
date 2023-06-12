@@ -559,7 +559,8 @@ purge_pq_t *trx_sys_init_at_db_start(void) {
     TODO(accheng): cluster schedule is currently hardcoded. */
 static void set_cluster_sched() {
   std::vector<int> arr {0, /* No-op */
-    1,2,
+    1,2 //,3,4,5,6,7,8//,9,10
+    // 1,2,3,4,5,6,7,8,//9,10 //,11,12,13,14,15,16,17,18,19,20 //,21,22,23,24,25,26,27,28,29,30,31,32,
   // 0,0,0,2,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,
     // 1,//0,0,0,
     // 2//,1,1,1,
@@ -582,7 +583,7 @@ static void set_cluster_sched() {
     trx_sys->cluster_sched[i] = arr[i];
   }
 
-  ut_ad(trx_sys->cluster_sched.size() == trx_sys->num_clusters + 1);
+  // ut_ad(trx_sys->cluster_sched.size() == trx_sys->num_clusters + 1);
 }
 
 /** Set cluster hot key array.
@@ -626,6 +627,119 @@ static void set_trx_type_len_arr() {
   }
 }
 
+static void set_knn_classifier() {
+  // std::ifstream file("../../data.csv");
+  // if (!file) {
+  //     std::cerr << "Failed to open file for training data." << std::endl;
+  // }
+
+  // std::string line;
+  // int line_count = 0;
+  // int col_count = 0;
+  // while (std::getline(file, line)) {
+  //   if (line_count == 0) {
+  //     std::stringstream ss(line);
+  //     std::string token;
+  //     while (std::getline(ss, token, ',')) {
+  //         if (token.empty()) {
+  //             continue;
+  //         }
+  //         if (token[0] != 'C') {
+  //           col_count++;
+  //         }
+  //     }
+  //   }
+  //   line_count++;
+  // }
+  // file.close();
+
+  // trx_sys->training_data.resize(line_count, std::vector<int>(col_count));
+  // trx_sys->labels.resize(line_count);
+
+  // std::ifstream read_file("/Users/audreycc/Documents/audrey-mysql-server/data.csv");
+  // if (!read_file) {
+  //     std::cerr << "Failed to open file for training data." << std::endl;
+  // }
+
+  // int row_count = 0;
+  // while (std::getline(read_file, line)) {
+  //   std::stringstream ss(line);
+  //   std::string token;
+  //   int col_num = 0;
+  //   while (std::getline(ss, token, ',')) {
+  //       if (token.empty()) {
+  //           continue;
+  //       }
+  //       if (token[0] == 'C') {
+  //         trx_sys->labels[row_count] = std::stoi(token.substr(1));
+  //       } else {
+  //         trx_sys->training_data[row_count][col_num] = std::stod(token);
+  //       }
+  //       col_num++;
+  //   }
+  //   row_count++;
+  // }
+  // read_file.close();
+
+  std::vector<std::vector<int>> training_data {
+    { 1, 0, 0},
+    { 2, 0, 0},
+    { 3, 0, 0},
+    { 4, 0, 0},
+    { 5, 0, 0},
+    { 6, 0, 0},
+    { 7, 0, 0},
+    { 8, 0, 0},
+    { 9, 0, 0},
+    { 10, 0, 0},
+    { 1, 0, 0},
+    { 2, 0, 0},
+    { 3, 0, 0},
+    { 4, 0, 0},
+    { 5, 0, 0},
+    { 6, 0, 0},
+    { 7, 0, 0},
+    { 8, 0, 0},
+    { 9, 0, 0},
+    { 10, 0, 0},
+    { 1, 0, 0},
+    { 2, 0, 0},
+    { 3, 0, 0},
+    { 4, 0, 0},
+    { 5, 0, 0},
+    { 6, 0, 0},
+    { 7, 0, 0},
+    { 8, 0, 0},
+    { 9, 0, 0},
+    { 10, 0, 0},
+    };
+  std::vector<int> labels {1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10};
+
+  trx_sys->training_data.resize(
+    training_data.size(),
+    std::vector<int>(training_data[0].size())
+  );
+  trx_sys->labels.resize(labels.size());
+
+  for (uint32_t i = 0; i < trx_sys->training_data.size(); i++) {
+    for (uint32_t j = 0; j < trx_sys->training_data[0].size(); j++) {
+      trx_sys->training_data[i][j] = training_data[i][j];
+    }
+  }
+
+  for (uint32_t i = 0; i < trx_sys->labels.size(); i++) {
+    trx_sys->labels[i] = labels[i];
+  }
+
+  for (int i = 0; i < trx_sys->training_data.size(); ++i) {
+    std::cout << "label: " << trx_sys->labels[i] << " data: ";
+    for (const auto &data : trx_sys->training_data[i]) {
+      std::cout << data << " ";
+    }
+    std::cout << std::endl;
+  }
+}
+
 /** Creates the trx_sys instance and initializes purge_queue and mutex. */
 void trx_sys_create(void) {
   ut_ad(trx_sys == nullptr);
@@ -654,7 +768,7 @@ void trx_sys_create(void) {
   }
 
   /* TODO(accheng): number of clusters is currently hardcoded. */
-  trx_sys->num_clusters = 2; //4; //
+  trx_sys->num_clusters = 2; //32; //4; //
 
   /* TODO(accheng): number of hot keys is currently hardcoded. */
   trx_sys->num_hot_keys = 4; // 4;
@@ -666,12 +780,14 @@ void trx_sys_create(void) {
 
   trx_sys->waiting_clust_locks = 0;
 
+  trx_sys->num_k = 3;
+
   /* TODO(accheng): cluster schedule length is currently hardcoded. */
   new (&trx_sys->cluster_sched)(decltype(trx_sys->cluster_sched))();
   set_cluster_sched();
 
   new (&trx_sys->sched_counts)(decltype(trx_sys->sched_counts))();
-  trx_sys->sched_counts.resize(trx_sys->cluster_sched.size());
+  trx_sys->sched_counts.resize(trx_sys->num_clusters + 1); // trx_sys->cluster_sched.size()
   for (auto& p : trx_sys->sched_counts) {
       p = ut::make_unique<std::atomic<int>>(0);
   }
@@ -685,6 +801,10 @@ void trx_sys_create(void) {
     trx_sys->num_trx_types,
      std::vector<int>(2)); //trx_sys->num_hot_keys)
   set_trx_type_len_arr();
+
+  new (&trx_sys->training_data)(decltype(trx_sys->training_data))();
+  new (&trx_sys->labels)(decltype(trx_sys->labels))();
+  set_knn_classifier();
 
   new (&trx_sys->rsegs) Rsegs();
   trx_sys->rsegs.set_empty();
@@ -767,6 +887,10 @@ void trx_sys_close(void) {
   trx_sys->trx_cluster_hotkey_arr.~vector<std::vector<int>>();
 
   trx_sys->trx_type_len_arr.~vector<std::vector<int>>();
+
+  trx_sys->training_data.~vector<std::vector<int>>();
+
+  trx_sys->labels.~vector<int>();
 
   ut::free(trx_sys);
 
