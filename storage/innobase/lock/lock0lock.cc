@@ -2279,6 +2279,20 @@ static void print_all_ongoing_trx() {
   }
 }
 
+// static void print_queue_counts() {
+  // std::cout << "total releases: " << trx_sys->req_count << std::endl;
+  // std::string k = "";
+  // std::string v = "";
+  // for (int i = 0; i < trx_sys->queue_counts.size(); ++i) {
+  //   if (trx_sys->queue_counts[i] != 0) {
+  //     k += std::to_string(i) + ",";
+  //     v += std::to_string(trx_sys->queue_counts[i]) + ",";
+  //   }
+  // }
+  // std::cout << "keys: " << k << std::endl;
+  // std::cout << "values: " << v << std::endl;
+// }
+
 /** Find the next available cluster and release the cluster lock of that
  transaction. */
 void release_next_clust() {
@@ -2288,6 +2302,7 @@ void release_next_clust() {
 
   uint32_t curr_idx = trx_sys->cluster_sched_idx;
   uint16_t cluster = trx_sys->cluster_sched[curr_idx];
+  int count = 0;
 
   bool found = false;
   rw_lock_t *hash_lock = hash_get_lock(lock_sys->cluster_hash, cluster);
@@ -2302,10 +2317,17 @@ void release_next_clust() {
     lock_clust_grant(next_lock);
 
     next_lock = lock_clust_pop_nl(cluster);
+    count++;
   }
 
   trx_sys->cluster_sched_idx = next_sched_idx();
   unlock_clust_hash(hash_lock);
+
+  // trx_sys->queue_counts[count]++;
+  // trx_sys->req_count++;
+  // if (trx_sys->req_count % 100 == 0 && trx_sys->req_count > 100) {
+  //   print_queue_counts();
+  // }
 
     // NEW CODE
   // check_partial_release(cluster);
@@ -2352,7 +2374,7 @@ static bool partial_release_next_lock(uint16_t cluster) {
 
   if (next_lock != NULL) { // && check_ongoing_phase(cluster)) {
     found = true;
-    // std::cout << "partial releasing cluster: " << cluster << std::endl;
+    std::cout << "partial releasing cluster: " << cluster << std::endl;
     trx_sys->sched_counts[cluster]->fetch_add(1);
 
     /* Release cluster lock. */
@@ -2388,6 +2410,80 @@ void partial_release_next_clust(uint16_t cluster) {
   // }
  }
 
+static size_t find_p_idx(uint16_t cluster) {
+  size_t rem10 = cluster % 10;
+  size_t div10 = cluster / 10;
+  size_t clust100 = 0;
+  if (rem10 == 0) {
+    clust100 = div10 - 1;
+  } else {
+    clust100 = div10;
+  }
+  return (clust100 + 100 + 1);
+}
+
+// return whether cluster can execute immediately
+static bool check_ongoing_key(uint16_t cluster) {
+    if (cluster > 100) {
+      int total = 0;
+      int idx100 = (cluster % 100); // TODO(accheng): hardcoded
+      if (idx100 < 11 && idx100 > 0) {
+        for (size_t i = 0; i < 10; i++) { // TPCC
+          size_t idx = i + (idx100 - 1) * 10 + 1;
+          // std::cout << "idx: " << idx << " idx100: " << idx100 << std::endl;
+          total += trx_sys->sched_counts[idx]->load();
+        }
+      }
+      total += trx_sys->sched_counts[cluster]->load();
+      return (total == 0);
+    }
+
+    size_t p_idx = find_p_idx(cluster);
+    int total = trx_sys->sched_counts[cluster]->load();
+    total += trx_sys->sched_counts[p_idx]->load();
+    return (total == 0);
+}
+
+void new_release_next_clust(uint16_t cluster) {
+  if (lock_clust_peek(cluster) == NULL) {
+    // key_release_next_clust
+    if (cluster > 100) {
+      int idx100 = cluster % 100;
+      // int total = 0;
+      for (uint16_t i = 0; i < 10; i++) {
+        size_t idx = i + (idx100 - 1) * 10 + 1;
+        // total += cluster_hash_[idx].size();
+        partial_release_next_lock(idx);
+      }
+      // std::cout << "total staring from: " << (idx100 - 1) * 10 + 1 << " is: " << total << std::endl;
+    } else {
+      size_t p_idx = find_p_idx(cluster);
+      // std::cout << "total for: " << p_idx << " is: " << cluster_hash_[p_idx].size() << std::endl;
+      if (check_ongoing_key(p_idx)) {
+        partial_release_next_lock(p_idx);
+      }
+    }
+  } else {
+    // key_partial_release_next_clust
+    if (cluster > 100) {
+      if (trx_sys->sched_counts[cluster]->load() == 0) {
+        partial_release_next_lock(cluster);
+      }
+    } else {
+      size_t p_idx = find_p_idx(cluster);
+      if (lock_clust_peek(p_idx) == NULL) {
+        if (trx_sys->sched_counts[cluster]->load() == 0) {
+          partial_release_next_lock(cluster);
+        }
+      } else {
+        if (check_ongoing_key(p_idx)) {
+          partial_release_next_lock(p_idx);
+        }
+      }
+    }
+  }
+}
+
 /** Starts the scheduling process for transaction with intra-cluster deps.
  @param[in,out]  trx             transaction
  @param[in,out]  thr             query thread of transaction
@@ -2418,6 +2514,46 @@ dberr_t partial_trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
     mutex_exit(&trx_sys->mutex);
 
     return (DB_SUCCESS);
+  }
+}
+
+dberr_t new_trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
+  if (trx->cluster_id == 0) {
+    return (DB_SUCCESS);
+  }
+
+  std::cout << "trx cluster: " << trx->cluster_id << std::endl;
+
+  // // TODO(accheng): don't queue
+  // int key_set_size = 3;
+  // if (cluster < 100) {
+  //   key_set_size = 5;
+  // }
+  // double lookup_prob = (2 * 1.0) / key_set_size;
+  // double defer_prob = 0.60;
+  // int defer = static_cast<int>((lookup_prob * defer_prob) * 100);
+  // if ((rand() % 100) >= defer) {
+  //   // std::cout << "not queueing cluster: " << cluster << std::endl;
+  //   txn->SetCluster(0);
+  //   return Status::OK();
+  // }
+
+  mutex_enter(&trx_sys->mutex);
+
+  if (check_ongoing_key(trx->cluster_id) && lock_clust_peek(trx->cluster_id) == NULL) {
+    std::cout << "1-run cluster: " << trx->cluster_id << std::endl;
+    trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
+
+    mutex_exit(&trx_sys->mutex);
+
+    return (DB_SUCCESS);
+  } else {
+    std::cout << "2-queueing cluster: " << trx->cluster_id << std::endl;
+    queue_clust_trx(trx, thr);
+
+    mutex_exit(&trx_sys->mutex);
+
+    return (DB_LOCK_CLUST_WAIT);
   }
 }
 

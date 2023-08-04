@@ -5750,7 +5750,7 @@ static int innobase_start_trx_for(
   //   std::cout << arg << ",";
   // }
   // std::cout << std::endl;
-  return 0;
+  // return 0;
 
   DBUG_TRACE;
   assert(hton == innodb_hton_ptr);

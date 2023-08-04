@@ -2225,6 +2225,7 @@ void trx_commit(trx_t *trx) /*!< in/out: transaction */
     mutex_enter(&trx_sys->mutex);
     trx_sys->sched_counts[trx->cluster_id]->fetch_sub(1);
 
+    // new_release_next_clust(trx->cluster_id);
     // NEW CODE
     // if (trx->cluster_id > 20) {
     // std::cout << "partial committing cluster: " << trx->cluster_id <<

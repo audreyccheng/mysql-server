@@ -603,6 +603,8 @@ struct trx_sys_t {
 
   std::vector<int> labels;
 
+  // std::vector<int> queue_counts;
+  // uint32_t req_count;
 
   /** @} */
 

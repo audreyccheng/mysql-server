@@ -978,7 +978,7 @@ static void lock_wait_rollback_deadlock_victim(trx_t *chosen_victim) {
   ut_a(chosen_victim->lock.que_state == TRX_QUE_LOCK_WAIT);
   lock_cancel_waiting_and_release(chosen_victim);
   trx_mutex_exit(chosen_victim);
-  std::cout << "deadlock!" << std::endl;
+  // std::cout << "deadlock!" << std::endl;
 }
 
 /** Given the `infos` about transactions and indexes in `infos` which form a
@@ -1416,8 +1416,8 @@ static void lock_wait_handle_deadlock(
   chosen_victim will be rolled back.
   This is mostly for "correctness" as the impact on performance is negligible
   (actually it looks like it is slowing us down). */
-  // lock_wait_update_weights_on_cycle(chosen_victim, cycle_ids, infos,
-  //                                   new_weights);
+  lock_wait_update_weights_on_cycle(chosen_victim, cycle_ids, infos,
+                                    new_weights);
 
   lock_notify_about_deadlock(
       lock_wait_trxs_rotated_for_notification(cycle_ids, infos), chosen_victim);
@@ -1695,8 +1695,8 @@ static void lock_wait_update_schedule_and_check_for_deadlocks() {
   lock_wait_build_wait_for_graph(infos, outgoing);
 
   /* We don't update trx->lock.schedule_weight for trxs on cycles. */
-  // lock_wait_compute_and_publish_weights_except_cycles(infos, table_reservations,
-  //                                                     outgoing, new_weights);
+  lock_wait_compute_and_publish_weights_except_cycles(infos, table_reservations,
+                                                      outgoing, new_weights);
 
   if (innobase_deadlock_detect) {
     /* This will also update trx->lock.schedule_weight for trxs on cycles. */

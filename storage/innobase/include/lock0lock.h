@@ -679,9 +679,13 @@ uint32_t prev_sched_idx(trx_t &trx);
  transaction. */
 void release_next_clust();
 
+void new_release_next_clust(uint16_t cluster);
+
 /** Find the next available cluster and release only the next cluster lock
 of that transaction. */
 void partial_release_next_clust(uint16_t cluster);
+
+dberr_t new_trx_sched_start_low(trx_t *trx, que_thr_t *thr);
 
 /** Starts the scheduling process for transaction.
 @param[in,out]  trx             transaction

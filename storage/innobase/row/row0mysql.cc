@@ -681,6 +681,7 @@ dberr_t schedule_trx(trx_t *trx) {
   thr->run_node = thr;
   thr->prev_node = thr;
 
+  // new_trx_sched_start_low(trx, thr);
   // NEW CODE
   // if (trx->cluster_id > 20) {
   // partial_trx_sched_start_low(trx, thr);
