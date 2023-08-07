@@ -2525,7 +2525,7 @@ dberr_t new_trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
     return (DB_SUCCESS);
   }
 
-  std::cout << "trx cluster: " << trx->cluster_id << std::endl;
+  // std::cout << "trx cluster: " << trx->cluster_id << std::endl;
 
   // // TODO(accheng): don't queue
   // int key_set_size = 3;
@@ -2544,14 +2544,14 @@ dberr_t new_trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
   mutex_enter(&trx_sys->mutex);
 
   if (check_ongoing_key(trx->cluster_id) && lock_clust_peek(trx->cluster_id) == NULL) {
-    std::cout << "1-run cluster: " << trx->cluster_id << std::endl;
+    // std::cout << "1-run cluster: " << trx->cluster_id << std::endl;
     trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
 
     mutex_exit(&trx_sys->mutex);
 
     return (DB_SUCCESS);
   } else {
-    std::cout << "2-queueing cluster: " << trx->cluster_id << std::endl;
+    // std::cout << "2-queueing cluster: " << trx->cluster_id << std::endl;
     queue_clust_trx(trx, thr);
 
     mutex_exit(&trx_sys->mutex);
