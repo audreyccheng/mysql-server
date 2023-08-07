@@ -559,8 +559,8 @@ purge_pq_t *trx_sys_init_at_db_start(void) {
     TODO(accheng): cluster schedule is currently hardcoded. */
 static void set_cluster_sched() {
   std::vector<int> arr {0, /* No-op */
-    1,2//,3,4,5,6,7,8//,9,10
-    // 1,2,3,4,5,6,7,8,//9,10 //,11,12,13,14,15,16,17,18,19,20 //,21,22,23,24,25,26,27,28,29,30,31,32,
+    //1,2//,3,4,5,6,7,8//,9,10
+     1,2,3,4,5,6,7,8,9,10 ,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,
   // 0,0,0,2,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,
     // 1,//0,0,0,
     // 2//,1,1,1,
@@ -768,7 +768,7 @@ void trx_sys_create(void) {
   }
 
   /* TODO(accheng): number of clusters is currently hardcoded. */
-  trx_sys->num_clusters = 2; //32; //4; //
+  trx_sys->num_clusters = 32; //32; //4; //
 
   /* TODO(accheng): number of hot keys is currently hardcoded. */
   trx_sys->num_hot_keys = 4; // 4;

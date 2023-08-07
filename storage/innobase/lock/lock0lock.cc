@@ -2489,6 +2489,9 @@ void new_release_next_clust(uint16_t cluster) {
  @param[in,out]  thr             query thread of transaction
  @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
 dberr_t partial_trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
+  if (trx->cluster_id == 0) {
+    return (DB_SUCCESS);
+  }
 
   mutex_enter(&trx_sys->mutex);
   // std::cout << "partial trx cluster: " << trx->cluster_id << std::endl;
@@ -2562,6 +2565,24 @@ dberr_t new_trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
  @param[in,out]  thr             query thread of transaction
  @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
 dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
+  if (trx->cluster_id == 0) {
+    return (DB_SUCCESS);
+  }
+
+  // defer code
+  // int key_set_size = 3;
+  // if (cluster < 20) {
+  //   key_set_size = 5;
+  // }
+  // double lookup_prob = (2 * 1.0) / key_set_size;
+  // double defer_prob = 0.60;
+  // int defer = static_cast<int>((lookup_prob * defer_prob) * 100);
+  // if ((rand() % 100) >= defer) {
+  //   // std::cout << "not queueing cluster: " << cluster << std::endl;
+  //   trx->cluster_id = 0;
+  //   return (DB_SUCCESS);
+  // }
+
   // std::cout << "trx cluster: " << trx->cluster_id << std::endl;
   if (trx_sys->cluster_sched_idx == 0) {
     mutex_enter(&trx_sys->mutex);
