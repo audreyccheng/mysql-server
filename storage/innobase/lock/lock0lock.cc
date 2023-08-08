@@ -2374,7 +2374,7 @@ static bool partial_release_next_lock(uint16_t cluster) {
 
   if (next_lock != NULL) { // && check_ongoing_phase(cluster)) {
     found = true;
-    std::cout << "partial releasing cluster: " << cluster << std::endl;
+    // std::cout << "partial releasing cluster: " << cluster << std::endl;
     trx_sys->sched_counts[cluster]->fetch_add(1);
 
     /* Release cluster lock. */
