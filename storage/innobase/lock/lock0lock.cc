@@ -2310,7 +2310,7 @@ void release_next_clust() {
   lock_clust_t *next_lock = lock_clust_pop_nl(cluster);
   while (next_lock != NULL) {
     found = true;
-    std::cout << "releasing cluster: " << cluster << std::endl;
+    // std::cout << "releasing cluster: " << cluster << std::endl;
     trx_sys->sched_counts[cluster]->fetch_add(1);
 
     /* Release cluster lock. */
@@ -2593,11 +2593,11 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
   //   return (DB_SUCCESS);
   // }
 
-  std::cout << "trx cluster: " << trx->cluster_id << std::endl;
+  // std::cout << "trx cluster: " << trx->cluster_id << std::endl;
   if (trx_sys->cluster_sched_idx == 0) {
     mutex_enter(&trx_sys->mutex);
-    std::cout<< "1-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
-          << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+    // std::cout<< "1-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+    //       << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
     if (trx_sys->cluster_sched_idx != 0) {
       /* A transaction doesn't need to wait for a cluster lock if there
       are no other transactions running. */
@@ -2638,8 +2638,8 @@ dberr_t trx_sched_start_low(trx_t *trx, que_thr_t *thr) {
       // TODO(accheng): update when there are more than 2 clusters
     // if (trx_sys->sched_counts[prev_sched_idx(*trx)]->load() == 0 &&
     //     trx_sys->sched_counts[trx->cluster_id]->load() == 0) {
-      std::cout<< "2-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
-          << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
+      // std::cout<< "2-queuing cluster-" << trx->cluster_id << " count1-" << trx_sys->sched_counts[prev_sched_idx(*trx)]->load()
+      //     << " count2-" << trx_sys->sched_counts[trx->cluster_id]->load() << std::endl;
     if (!check_ongoing_trx()) {
       trx_sys->sched_counts[trx->cluster_id]->fetch_add(1);
 
