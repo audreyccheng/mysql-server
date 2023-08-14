@@ -768,7 +768,7 @@ void trx_sys_create(void) {
   }
 
   /* TODO(accheng): number of clusters is currently hardcoded. */
-  trx_sys->num_clusters = 8; //32; //4; //
+  trx_sys->num_clusters = 8; //32; //4; //256; //
 
   /* TODO(accheng): number of hot keys is currently hardcoded. */
   trx_sys->num_hot_keys = 4; // 4;
