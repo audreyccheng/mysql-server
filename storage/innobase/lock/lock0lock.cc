@@ -320,6 +320,7 @@ void lock_sys_create(
   lock_sys->rec_hash = ut::new_<hash_table_t>(n_cells);
   lock_sys->prdt_hash = ut::new_<hash_table_t>(n_cells);
   lock_sys->prdt_page_hash = ut::new_<hash_table_t>(n_cells);
+  // TODO(accheng): init hash table for cluster locks
 
   if (!srv_read_only_mode) {
     lock_latest_err_file = os_file_create_tmpfile();

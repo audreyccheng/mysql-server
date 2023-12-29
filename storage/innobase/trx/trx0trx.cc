@@ -1241,6 +1241,413 @@ void trx_assign_rseg_temp(trx_t *trx) {
   }
 }
 
+  // TODO(accheng): initialize fields in trx that we need here?
+  // they should already be set to default vals?
+
+  // TODO(accheng): do we need to set cluster id / wait thr in trx_start_low?
+
+  // initialize the 2 fields we need in trx_t
+  // ut_a(trx->cluster_id == 0);
+
+  // TODO(accheng): we should cluster after this step?
+
+  // scheduling code below should go here
+
+static int innobase_start_trx_for(
+  handlerton *hton,
+  THD *thd,
+  uint typ,
+  const List<Item> &args)
+{
+  int err;
+  dberr_t error;
+
+  DBUG_TRACE;
+  assert(hton == innodb_hton_ptr);
+
+  /* Create a new trx struct for thd, if it does not yet have one */
+
+  trx_t *trx = check_trx_exists(thd);
+
+  TrxInInnoDB trx_in_innodb(trx);
+
+  innobase_srv_conc_force_exit_innodb(trx);
+
+  /* The transaction should not be active yet, start it */
+  ut_ad(!trx_is_started(trx));
+
+  trx_start_if_not_started_xa(trx, false, UT_LOCATION_HERE);
+
+  ut_a(trx->clust_wait_thr == nullptr);
+
+  /* Assign a cluster id for this transaction. */
+  trx->cluster_id = trx_get_cluster_no(typ, args);
+
+  /* Assign a read view if the transaction does not have it yet.
+  Do this only if transaction is using REPEATABLE READ isolation
+  level. */
+  trx->isolation_level =
+      innobase_trx_map_isolation_level(thd_get_trx_isolation(thd));
+
+  // TODO(accheng): support other isolation levels eventually?
+  if (trx->isolation_level != TRX_ISO_SERIALIZABLE) {
+    push_warning_printf(thd, Sql_condition::SL_WARNING, HA_ERR_UNSUPPORTED,
+                        "InnoDB: Cluster scheudling can only"
+                        " be used with"
+                        " SERIALIZABLE isolation level.");
+    trx->isolation_level = TRX_ISO_SERIALIZABLE;
+  }
+
+  /* Set the MySQL flag to mark that there is an active transaction */
+
+  innobase_register_trx(hton, current_thd, trx);
+
+  ut_a(m_prebuilt->trx == trx);
+
+  // TODO(accheng): add stats eventually?
+  // ha_statistic_increment(&System_status_var::ha_update_count);
+
+  error = innobase_srv_conc_enter_innodb(m_prebuilt);
+
+  if (error != DB_SUCCESS) {
+    goto func_exit;
+  }
+
+  error = schedule_trx(m_prebuilt);
+
+  if (error != DB_SUCCESS) {
+    /* Something is wrong during transaction scheduling. */
+    goto func_exit;
+  }
+
+  innobase_srv_conc_exit_innodb(m_prebuilt);
+
+func_exit:
+
+  err =
+      convert_error_code_to_mysql(error, m_prebuilt->table->flags, m_user_thd);
+
+  return err;
+}
+
+// //////////////////////////////////////////////////////
+
+//   int err;
+
+//   dberr_t error;
+//   // TODO(accheng): not sure if this is needed or above?
+//   trx_t *trx = thd_to_trx(m_user_thd);
+
+//   // TODO(accheng): should we be accessing m_prebuilt?
+//   ut_a(m_prebuilt->trx == trx);
+
+//   // check this is not a read-only transaction
+//   // TODO(accheng): do we need this?
+//   if (high_level_read_only && !m_prebuilt->table->is_intrinsic()) {
+//     ib_senderrf(ha_thd(), IB_LOG_LEVEL_WARN, ER_READ_ONLY_MODE);
+//     return HA_ERR_TABLE_READONLY;
+//   } else if (!trx_is_started(trx)) {
+//     ++trx->will_lock;
+//   }
+
+//   // TODO(accheng): add stats eventually?
+//   ha_statistic_increment(&System_status_var::ha_update_count);
+
+//   error = innobase_srv_conc_enter_innodb(m_prebuilt);
+
+//   if (error != DB_SUCCESS) {
+//     goto func_exit;
+//   }
+
+//   error = schedule_trx();
+
+//   if (error != DB_SUCCESS) {
+//     // something is wrong, can't start transaction
+//     goto func_exit;
+//   }
+
+//   innobase_srv_conc_exit_innodb(m_prebuilt);
+
+// func_exit:
+
+//   err =
+//       convert_error_code_to_mysql(error, m_prebuilt->table->flags, m_user_thd);
+
+//   return err;
+// }
+
+// trx_start_if_not_started_xa(trx, true, UT_LOCATION_HERE);
+
+    // goto error;
+
+/** Does an update or delete of a row for MySQL.
+@param[in,out]  prebuilt        prebuilt struct in MySQL handle
+@return error code or DB_SUCCESS */
+dberr_t schedule_trx(row_prebuilt_t *prebuilt) {
+  trx_savept_t savept;
+  dberr_t err;
+  que_thr_t *thr;
+  trx_t *trx = prebuilt->trx;
+
+  trx->op_info = "cluster scheduling";
+
+  /* The transaction should be active at this point to be scheduled */
+  ut_a(trx_is_started(trx));
+
+  savept = trx_savept_take(trx);
+
+  /* Create a dummy sched_graph for getting a query thread to do the cluster locking. */
+  if (prebuilt->sched_graph == nullptr) {
+    row_prebuilt_sched_graph(prebuilt);
+  }
+  thr = que_fork_get_first_thr(prebuilt->sched_graph);
+
+  // TODO(accheng): do we need this?
+  ut_ad(!prebuilt->sql_stat_start);
+
+  que_thr_move_to_run_state_for_mysql(thr, trx);
+
+  thr->run_node = node;
+  thr->prev_node = node;
+
+  trx_sched_start_low(false /* queued before */);
+
+  err = trx->error_state;
+
+  if (err != DB_SUCCESS) {
+    que_thr_stop_for_mysql(thr);
+
+    if (err != DB_LOCK_CLUST_WAIT) {
+      goto error;
+    }
+
+    // TODO(accheng): we can make a new state type for tracking stats in lock0wait.cc
+    // thr->lock_state = QUE_THR_LOCK_ROW;
+
+    DEBUG_SYNC(trx->mysql_thd, "scheduling_for_mysql_error");
+
+    auto was_lock_wait = row_mysql_handle_errors(&err, trx, thr, &savept);
+
+    /* Try scheduling again after we've queued. */
+    trx_sched_start_low(true /* queued before */);
+  } else {
+    /* We should only hit this point if we're the first trx to be scheduled. */
+    DEBUG_SYNC(trx->mysql_thd, "first_trx_scheduled_for_mysql_error");
+  }
+
+  que_thr_stop_for_mysql_no_error(thr, trx);
+
+  trx->op_info = "";
+
+  return (err);
+}
+
+// TODO(accheng) maybe update stats
+
+// run_again:
+  // check this
+
+    // thr->lock_state = QUE_THR_LOCK_NOLOCK;
+
+    // if (was_lock_wait) {
+    //   // we should only be able to run if we've already waited for our cluster lock
+    //   queued = true;
+    //   goto run_again;
+    // }
+
+
+// Call release_next_clust() when a transaction is woken up from cluster lock
+
+// error:
+//   return err;
+
+// case DB_LOCK_CLUST_WAIT:
+
+  // DEBUG_SYNC_C("before_lock_clust_wait_suspend");
+
+  // trx->error_state should be DB_SUCCESS after this function
+  // what if it isn't? only DB_INTERRUPTED possible at this point, which MySQL will roll back
+  // lock_clust_wait_suspend_thread(thr);
+
+  // if (trx->error_state != DB_SUCCESS) {
+  //   que_thr_stop_for_mysql(thr);
+
+  //   goto handle_new_error;
+  // }
+
+  // *new_err = err;
+
+  // return (true);
+
+//
+//
+
+  // TODO(accheng): read_write?
+  // if (!trx->read_only &&
+  //     (trx->mysql_thd == nullptr || read_write || trx->ddl_operation)) {
+
+    // TODO(accheng): add txn to scheduling queue, set scheduled bool to true
+  // * This code should only be called for START TRANSACTION ... FOR
+  // trx->scheduled = true;
+
+    // UNLOCK TRX_SYS_T MUTEX!
+
+        // UNLOCK TRX_SYS_T MUTEX!
+
+/** Starts the scheduling process for transaction.
+ @param[in,out] queued     whether transaction has already queued on cluster lock.
+ @return DB_SUCCESS or DB_LOCK_CLUST_WAIT */
+dberr_t trx_sched_start_low(bool queued) {
+  /* Check if clust_hash needs to be resized before adding more locks. */
+  bool resized = lock_clust_resize();
+
+  /* Grab trx_sys mutex before making changes to cluster_sched_idx. */
+  trx_sys_mutex_enter();
+
+  if (trx_sys->cluster_sched_idx == 0 || queued) {
+    /* For the first transaction to be scheduled, we need to move cluster_sched_idx
+    to its corresponding cluster. */
+    if (trx_sys->cluster_sched_idx == 0) {
+      while (trx_sys->cluster_schedule[trx_sys->cluster_sched_idx] != trx->cluster) {
+        trx_sys->cluster_sched_idx++;
+        if (trx_sys->cluster_sched_idx == trx_sys->cluster_schedule.size()) {
+          trx_sys->cluster_sched_idx = 1;
+        }
+      }
+    } else {
+      /* If the transaction has been queued before, its cluster must have been chosen
+      as the cluster to grant a lock to. */
+      ut_a(trx_sys->cluster_schedule[trx_sys->cluster_sched_idx] == trx->cluster)
+    }
+
+    /* Allow the next waiting cluster to execute. */
+    release_next_clust();
+
+    trx_sys_mutex_exit();
+
+    return (DB_SUCCESS);
+
+  } else {
+    trx_sys_mutex_exit();
+
+    trx = thr_get_trx(thr);
+
+    /* Add transaction to appropriate cluster lock. */
+    queue_clust_trx(trx, thr);
+
+    return (DB_LOCK_CLUST_WAIT);
+  }
+}
+
+/** Find the next available cluster and release the cluster lock of that transaction. */
+void release_next_clust() {
+  ut_ad(trx_sys_mutex_own());
+
+  /* Increment trx_sys->cluster_sched_idx until we find a waiting cluster to unlock. */
+  lock_clust_t *next_lock = NULL;
+  /* TODO(accheng): we're naively skipping ahead for now but we may want to be more
+   sophisticated in the future. */
+  while (next_lock == NULL) {
+    trx_sys->cluster_sched_idx++;
+    if (trx_sys->cluster_sched_idx == trx_sys->cluster_schedule.size()) {
+      trx_sys->cluster_sched_idx = 1;
+    }
+
+    /* TODO(accheng): eventually, we don't want to pop the cluster lock off the queue
+     immediately but check if it can be freed. */
+    uint16_t cluster = trx_sys->cluster_schedule[trx_sys->cluster_sched_idx];
+    next_lock = lock_clust_pop(cluster);
+  }
+
+    /* Release cluster lock of next available cluster in schedule. */
+    lock_clust_grant(next_lock);
+}
+
+/** Add trx to appropriate cluster lock queue and stop query thread. */
+void queue_clust_trx(trx_t *trx, que_thr_t *thr) {
+  trx_mutex_enter(trx);
+
+  trx->lock_clust->trx = trx;
+  trx->lock_clust.wait_started =
+    std::chrono::system_clock::from_time_t(time(nullptr));
+
+  lock_clust_push(trx->lock_clust);
+
+  trx->error_state = DB_LOCK_CLUST_WAIT;
+
+  bool stopped = que_thr_stop(thr);
+  ut_a(stopped);
+
+  trx_mutex_exit(trx);
+}
+
+
+/** Releases a user OS thread waiting for a cluster lock to be released, if the
+ thread is already suspended.
+ @param[in]   thr   query thread associated with the user OS thread */
+static void lock_clust_wait_release_thread_if_suspended(que_thr_t *thr) {
+  auto trx = thr_get_trx(thr);
+
+  ut_ad(trx_mutex_own(trx));
+
+  ut_ad(thr->state == QUE_THR_RUNNING);
+
+  if (thr->slot != nullptr && thr->slot->in_use && thr->slot->thr == thr) {
+    os_event_set(thr->slot->event);
+  }
+}
+
+void lock_clust_reset_wait_and_release_thread_if_suspended(lock_clust_t *lock) {
+  ut_ad(trx_mutex_own(lock->trx));
+
+  /* The following function releases the trx from cluster lock wait */
+
+  que_thr_t *thr = que_thr_end_lock_clust_wait(lock->trx);
+
+  if (thr != nullptr) {
+    lock_clust_wait_release_thread_if_suspended(thr);
+  }
+}
+
+
+/** Moves a suspended query thread to running state and may release
+ a worker thread to execute it. This function should be used to end
+ the wait state of a query thread waiting for a cluster lock.
+ @return the query thread that needs to be released. */
+que_thr_t *que_thr_end_lock_clust_wait(trx_t *trx) /*!< in: transaction */
+{
+  ut_ad(trx_mutex_own(trx));
+
+  /* This is the only possible state here for scheduling. */
+  ut_a(thr->state == QUE_THR_LOCK_CLUST_WAIT);
+
+  bool const was_active = thr->is_active;
+
+  que_thr_move_to_run_state(thr);
+
+  /* In MySQL we let the OS thread (not just the query thread) to wait
+  for the lock to be released: */
+
+  return !was_active ? thr : nullptr;
+}
+
+    // lock_clust_t *lock = lock_clust_create(trx);
+
+    /* Wait for lock on cluster record. */
+    // lock_cluster_trx(trx, trx->cluster);
+
+// /** Create cluster lock for transaction and add it to queue. */
+// lock_clust_t *lock_clust_create(trx_t *trx) {
+//   /* We are about to modify trx->lock_clust which needs trx->mutex */
+//   ut_ad(trx_mutex_own(trx));
+
+//   lock->trx = trx;
+
+//   lock_clust_push(lock);
+
+//   return (lock);
+// }
+
 /** Starts a transaction. */
 static void trx_start_low(
     trx_t *trx,      /*!< in: transaction */

@@ -153,6 +153,11 @@ void trx_start_internal_low(trx_t *trx); /*!< in/out: transaction */
 @param[in,out] trx      transaction to be started */
 void trx_start_internal_read_only_low(trx_t *trx);
 
+// TODO(accheng): do we need bool read_write?
+/** Starts the scheduling process for transaction
+@param[in] trx Transaction */
+void trx_sched_start_low(trx_t *trx);
+
 /** Commits a transaction. */
 void trx_commit(trx_t *trx); /*!< in/out: transaction */
 
@@ -970,6 +975,15 @@ struct trx_t {
 #endif /* UNIV_DEBUG */
   /*------------------------------*/
 
+  // TODO(accheng): what if there is a rollback?
+  /* True if this transaction is in scheduling queue */
+  // bool scheduled;
+
+  // TODO(accheng):
+  // uint16_t type; /* transaction type */
+  // std::vector<std::string> args; /* transaction arguments */
+  // uint16_t cluster; /* transaction cluster */
+
   /** DB_SUCCESS if no error, otherwise error number.
   Accessed without any mutex only by the thread doing the transaction or, if it
   is suspended (waiting for a lock), by the thread holding this->mutex which
@@ -1301,6 +1315,12 @@ static inline void trx_start_if_not_started(trx_t *t, bool rw, ut::Location l) {
   trx_start_if_not_started_xa_low(t, rw);
 }
 #endif /* UNIV_DEBUG */
+
+// TODO(accheng): need debug version?
+static inline void trx_sched_start(trx_t *t) {
+  trx_sched_start_low(t);
+}
+
 
 /* Transaction isolation levels (trx->isolation_level) */
 #define TRX_ISO_READ_UNCOMMITTED trx_t::READ_UNCOMMITTED

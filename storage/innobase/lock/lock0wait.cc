@@ -239,6 +239,7 @@ void lock_wait_suspend_thread(que_thr_t *thr) {
 
   slot = lock_wait_table_reserve_slot(thr, lock_wait_timeout);
 
+  // TODO(accheng): add stats tracking for QUE_THR_LOCK_SCHED
   if (thr->lock_state == QUE_THR_LOCK_ROW) {
     srv_stats.n_lock_wait_count.inc();
     srv_stats.n_lock_wait_current_count.inc();

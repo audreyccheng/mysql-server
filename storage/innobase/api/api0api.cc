@@ -526,6 +526,9 @@ ib_err_t ib_trx_start(
   from the client. */
   trx->mysql_thd = static_cast<THD *>(thd);
 
+  // TODO(accheng): scheduling should be done here
+  // trx_sched_start(trx);
+
   return (err);
 }
 

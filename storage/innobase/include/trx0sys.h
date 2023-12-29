@@ -550,6 +550,21 @@ struct trx_sys_t {
   releasing locks to ensure right order of removal and consistent snapshot. */
   trx_ids_t rw_trx_ids;
 
+  // TODO(accheng): queue for scheduled txns, cluster schedule (which should be larger than expected queue size)
+  // * refer to lock_table_create() in lock0lock.cc for handling memory of list
+  // * lock_grant_or_update_wait_for_edge() in lock0lock.cc: check if lock is blocked
+  // * que_thr_t *wait_thr in trx0trx.h: reuse this, lock at start
+  // * ib_update_row_with_lock_retry() in api0api.cc: make thread wait on lock
+  // * lock_wait_release_thread_if_suspended in lock0wait.cc: details about safety in waking thread up
+  // * lock_grant in lock0lock.cc: release lock
+
+  /* Index for cluster schedule (protected by trx_sys_mutex). */
+  uint32_t cluster_sched_idx;
+
+  /* Cluster schedule index cooresponding to clusters vector.
+     First value is a no-op cluster. */
+  std::vector<uint32_t, ut::allocator<uint32_t>> cluster_schedule;
+
   char pad7[ut::INNODB_CACHE_LINE_SIZE];
 
   /** Mapping from transaction id to transaction instance. */

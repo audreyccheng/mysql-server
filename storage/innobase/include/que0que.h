@@ -228,6 +228,8 @@ enum que_thr_state_t {
 /** Query thread lock states */
 enum que_thr_lock_t {
   QUE_THR_LOCK_NOLOCK,
+  // TODO(accheng):
+//   QUE_THR_LOCK_SCHED, /* lock for scheduling queue */
   QUE_THR_LOCK_ROW,
   QUE_THR_LOCK_TABLE
 };
